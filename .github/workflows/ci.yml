@@ -74,6 +74,7 @@ jobs:
       # Pinned: this job holds the SonarQube token, so a new release must not run in it unreviewed.
       - run: dotnet tool install --global dotnet-sonarscanner --version 11.3.0
       # The .NET scanner does not read SONAR_TOKEN for `begin`, so the token is an argument of `begin` and `end`. Pull requests from forks never get it.
+      # tools/ holds the review-decisions checker copied from github-template: it has its own tests (test_check.py) and is not product code.
       # Roslyn/IDE analyzers are already enforced by the build and dotnet format: importing them into Sonar only duplicates them.
       - name: Begin SonarQube analysis
         run: >
@@ -84,6 +85,7 @@ jobs:
           /d:sonar.cs.vscoveragexml.reportsPaths="coverage/**/*.xml"
           /d:sonar.coverage.exclusions="**/obj/**,**/*.g.cs"
           /d:sonar.cs.roslyn.ignoreIssues=true
+          /d:sonar.exclusions="tools/**"
           /d:sonar.qualitygate.wait=true
       - run: dotnet build MafLabs.Notifications.slnx --configuration Release
       - name: End SonarQube analysis
