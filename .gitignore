@@ -3,3 +3,6 @@
 TestResults/
 .vs/
 *.nupkg
+StrykerOutput/
+__pycache__/
+*.pyc

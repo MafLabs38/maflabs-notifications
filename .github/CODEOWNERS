@@ -1,0 +1,8 @@
+# Default reviewers for every change
+* @Maf38
+# The review register, its checker, who may approve, and the review agents: the coding agent does not merge these on its own.
+/docs/review-decisions/ @Maf38
+/tools/review-decisions/ @Maf38
+/.github/review-approvers @Maf38
+/.github/workflows/ @Maf38
+/.claude/ @Maf38
