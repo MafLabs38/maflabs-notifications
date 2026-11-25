@@ -178,6 +178,20 @@ public sealed class SmtpNotificationFixture : IDisposable
     }
 
     [Fact]
+    public async Task should_send_nothing_when_notifications_are_turned_off()
+    {
+        using var server = new MailServer();
+        var options = Settings(server.Port, "127.0.0.1");
+        options.Smtp.StartTls = false;
+        options.Enabled = false;
+
+        var result = await new SmtpNotificationSender(Options.Create(options)).SendAsync(new Notification("me@homelab.example", "s", "b"), Token);
+
+        result.Should().Be(NotificationResult.Failed("Notifications are turned off."));
+        server.Received.ToString().Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task should_send_a_plain_text_mail_when_there_is_no_content()
     {
         using var server = new MailServer();
