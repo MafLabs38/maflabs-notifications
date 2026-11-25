@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Mail;
+using System.Net.Mime;
 using System.Net.Sockets;
 using System.Text;
 using Microsoft.Extensions.Options;
@@ -84,6 +85,22 @@ public sealed class SmtpNotificationSender : INotificationSender
                 SubjectEncoding = Encoding.UTF8,
                 BodyEncoding = Encoding.UTF8,
             };
+            if (notification.Content is { } content)
+            {
+                if (string.IsNullOrWhiteSpace(content.Product) || string.IsNullOrWhiteSpace(content.Title) || string.IsNullOrWhiteSpace(notification.Category) || content.Blocks is null)
+                {
+                    return NotificationResult.Failed("The notification content is incomplete: it needs a Product, a Title, blocks and a Category.");
+                }
+
+                // The mail dresses the content itself: the text stays the body (text/plain) and the HTML is its alternative (multipart/alternative, the client shows the last one it understands).
+                // Every value is encoded by the layout; no HTML ever comes from the caller.
+                var context = new MailContext(content.Product, notification.Category, notification.Level ?? NotificationLevel.Info);
+                message.Body = MailLayout.RenderText(context, content.Title, content.Blocks);
+                var html = AlternateView.CreateAlternateViewFromString(MailLayout.RenderHtml(context, content.Title, content.Blocks), Encoding.UTF8, MediaTypeNames.Text.Html);
+                html.TransferEncoding = TransferEncoding.Base64;
+                message.AlternateViews.Add(html);
+            }
+
             // S5332 (a clear connection): STARTTLS is on unless the operator turns it off, and the validation refuses that with a password. It is only for a catcher on a test machine.
 #pragma warning disable S5332
             using var client = new SmtpClient(smtp.Host, smtp.Port)

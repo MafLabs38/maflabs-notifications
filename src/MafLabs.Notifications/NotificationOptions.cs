@@ -4,7 +4,9 @@ namespace MafLabs.Notifications;
 
 /// <summary>
 /// Settings of the notifications, from the <c>Notifications</c> section. Off by default: turning it on lets the application write to ONE explicit
-/// recipient. An application adds its own policy (when to write, how often, caps) by deriving from this class and binding its own section to it.
+/// recipient. When to write, how often and the caps are not here: they are the categories (<see cref="NotificationCategories"/>, <see cref="CategoryPolicy"/>),
+/// the program-wide <see cref="NotificationPolicyOptions"/> and <see cref="NotificationDecider"/>. Deriving from this class is only for extra
+/// settings of a provider the application adds itself.
 /// </summary>
 public class NotificationOptions
 {
@@ -41,7 +43,7 @@ public sealed class SmtpOptions
     public int TimeoutSeconds { get; set; } = 30;
 }
 
-/// <summary>Checks the settings when notifications are turned on. An application with its own policy settings derives from this class and overrides <see cref="ValidatePolicy"/>.</summary>
+/// <summary>Checks the settings when notifications are turned on. An application that derives <see cref="NotificationOptions"/> for extra settings of its own provider overrides <see cref="ValidatePolicy"/> to check them (the policy itself is checked by <see cref="NotificationPolicyOptionsValidator"/> and <see cref="CategoryPolicyValidator"/>).</summary>
 public class NotificationOptionsValidator : IValidateOptions<NotificationOptions>
 {
     private readonly INotificationProvider[] _providers;
@@ -73,7 +75,7 @@ public class NotificationOptionsValidator : IValidateOptions<NotificationOptions
         return failure is null ? ValidateOptionsResult.Success : ValidateOptionsResult.Fail(failure);
     }
 
-    /// <summary>What is wrong with the application's own settings (reminders, caps), or null. Called last, only when notifications are turned on.</summary>
+    /// <summary>What is wrong with the extra settings of a derived <see cref="NotificationOptions"/> (not the policy: see the categories), or null. Called last, only when notifications are turned on.</summary>
     protected virtual string? ValidatePolicy(NotificationOptions options) => null;
 }
 
