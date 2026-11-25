@@ -4,9 +4,19 @@ namespace MafLabs.Notifications;
 
 /// <summary>
 /// A message for a person: where it goes, a short subject and a plain text. <paramref name="HtmlBody"/> is the same message as HTML, when there is
-/// one: the mail then carries both (text and HTML alternatives), and the client shows the one it prefers.
+/// one: the mail then carries both (text and HTML alternatives), and the client shows the one it prefers. A provider that is not mail (a chat, a push)
+/// uses <paramref name="Level"/>, <paramref name="Category"/>, <paramref name="Subject"/> and <paramref name="Body"/>, and ignores <paramref name="HtmlBody"/>.
 /// </summary>
-public sealed record Notification(string Recipient, string Subject, string Body, string? HtmlBody = null);
+/// <param name="Recipient">Where it goes.</param>
+/// <param name="Subject">A short subject.</param>
+/// <param name="Body">The plain text.</param>
+/// <param name="HtmlBody">
+/// The same message as HTML. It is sent as it is, never encoded or cleaned by the sender: build it with <see cref="MailTemplate"/> or <see cref="MailLayout"/>,
+/// which encode every value, and never concatenate a value that is not yours into it.
+/// </param>
+/// <param name="Level">How much it matters, for a channel that has no HTML to show it with, or null when not known.</param>
+/// <param name="Category">The display name of the category it belongs to, or null when not known.</param>
+public sealed record Notification(string Recipient, string Subject, string Body, string? HtmlBody = null, MailLevel? Level = null, string? Category = null);
 
 /// <summary>Whether a notification was handed over, and when it was not, why in a short sentence (never a secret).</summary>
 public sealed record NotificationResult(bool Delivered, string? Reason = null)

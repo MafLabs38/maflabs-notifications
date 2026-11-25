@@ -34,6 +34,9 @@ public sealed record MailCallToAction(string Text) : MailBlock;
 /// </summary>
 public static class MailLayout
 {
+    /// <summary>The most items a list shows; beyond it the list ends with one line, "and N more".</summary>
+    public const int MaxItems = 50;
+
     private const string Font = "-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
 
     /// <summary>The accent color of a level, as a hex color: dark enough to carry white text.</summary>
@@ -57,13 +60,17 @@ public static class MailLayout
     };
 
     /// <summary>The sentence at the foot of every mail: who wrote it and why the reader gets it.</summary>
-    public static string FooterOf(MailContext context) =>
-        $"Sent by {Line(context.Product)}; you receive this because notifications are enabled for {Line(context.CategoryTitle)}.";
+    public static string FooterOf(MailContext context)
+    {
+        Check(context);
+        return $"Sent by {Line(context.Product)}; you receive this because notifications are enabled for {Line(context.CategoryTitle)}.";
+    }
 
     /// <summary>The text alternative: the level, the title, the blocks and the footer, readable as it is.</summary>
     public static string RenderText(MailContext context, string title, IReadOnlyList<MailBlock> blocks)
     {
-        ArgumentNullException.ThrowIfNull(context);
+        Check(context);
+        ArgumentNullException.ThrowIfNull(title);
         ArgumentNullException.ThrowIfNull(blocks);
         var builder = new StringBuilder();
         builder.Append('[').Append(LabelOf(context.Level)).Append("] ").Append(Line(context.Product)).Append(" - ").Append(Line(context.CategoryTitle)).Append("\n\n");
@@ -86,14 +93,15 @@ public static class MailLayout
     {
         MailParagraph paragraph => Text(paragraph.Text),
         MailCallToAction action => Text(action.Text),
-        MailItems items => string.Join('\n', items.Lines.Select(line => $"- {Line(line)}")),
+        MailItems items => string.Join('\n', Visible(items).Select(line => $"- {line}")),
         _ => throw new ArgumentException("Unknown kind of mail block.", nameof(block)),
     };
 
     /// <summary>The HTML document. Every value is encoded; nothing the caller gives is ever written raw.</summary>
     public static string RenderHtml(MailContext context, string title, IReadOnlyList<MailBlock> blocks)
     {
-        ArgumentNullException.ThrowIfNull(context);
+        Check(context);
+        ArgumentNullException.ThrowIfNull(title);
         ArgumentNullException.ThrowIfNull(blocks);
         var accent = AccentOf(context.Level);
         var builder = new StringBuilder(4096);
@@ -154,12 +162,13 @@ public static class MailLayout
                 content = $"<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\"><tr><td class=\"mb mt\" bgcolor=\"#f3f4f6\" style=\"background-color:#f3f4f6;color:#111827;border-left:4px solid {accent};padding:12px 16px;font-weight:600;font-family:{Font};font-size:15px;line-height:1.5;\">{Html(action.Text)}</td></tr></table>";
                 break;
             case MailItems items:
-                if (items.Lines.Count == 0)
+                var visible = Visible(items);
+                if (visible.Count == 0)
                 {
                     return;
                 }
 
-                var rows = string.Concat(items.Lines.Select(line => $"<li class=\"mt\" style=\"margin:0;padding:3px 0;color:#1f2937;\">{Html(line)}</li>"));
+                var rows = string.Concat(visible.Select(line => $"<li class=\"mt\" style=\"margin:0;padding:3px 0;color:#1f2937;\">{Html(line)}</li>"));
                 content = $"<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\"><tr><td class=\"mb mt\" bgcolor=\"#f3f4f6\" style=\"background-color:#f3f4f6;color:#1f2937;border-left:4px solid {accent};padding:12px 16px 12px 12px;font-family:{Font};font-size:15px;line-height:1.5;\"><ul style=\"margin:0;padding:0 0 0 20px;\">{rows}</ul></td></tr></table>";
                 break;
             default:
@@ -169,6 +178,29 @@ public static class MailLayout
         // A row of its own gives the spacing between blocks: a table cell is the one box a client cannot ignore.
         builder.Append("<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\"><tr><td style=\"padding:0 0 16px 0;\">")
             .Append(content).Append("</td></tr></table>\n");
+    }
+
+    private static void Check(MailContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(context.Product);
+        ArgumentNullException.ThrowIfNull(context.CategoryTitle);
+    }
+
+    /// <summary>The lines of a list as they are written: cleaned, the empty ones dropped, at most <see cref="MaxItems"/> and then one line that counts the rest.</summary>
+    private static List<string> Visible(MailItems items)
+    {
+        ArgumentNullException.ThrowIfNull(items.Lines);
+        var lines = items.Lines.Where(line => line is not null).Select(Line).Where(line => line.Length > 0).ToList();
+        if (lines.Count <= MaxItems)
+        {
+            return lines;
+        }
+
+        var more = lines.Count - MaxItems;
+        lines.RemoveRange(MaxItems, more);
+        lines.Add($"and {more} more");
+        return lines;
     }
 
     /// <summary>A value as text on one line.</summary>

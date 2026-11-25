@@ -3,10 +3,17 @@ using System.Text.RegularExpressions;
 namespace MafLabs.Notifications;
 
 /// <summary>A mail ready to send: the subject, the text and the HTML made from the same content.</summary>
-public sealed record RenderedMail(string Subject, string Text, string Html)
+/// <param name="Subject">The subject.</param>
+/// <param name="Text">The plain text alternative.</param>
+/// <param name="Html">The HTML mail.</param>
+/// <param name="Context">What the mail is about, when it was rendered with one (<see cref="MailTemplate.RenderMail"/> always gives it): the level and the category carried to the notification.</param>
+public sealed record RenderedMail(string Subject, string Text, string Html, MailContext? Context = null)
 {
-    /// <summary>The notification that carries this mail to one recipient: the text for the clients that show no HTML, the HTML for the others.</summary>
-    public Notification ToNotification(string recipient) => new(recipient, Subject, Text, Html);
+    /// <summary>
+    /// The notification that carries this mail to one recipient: the text for the clients that show no HTML, the HTML for the others, and the level and
+    /// the category title of the context for a provider that is not mail.
+    /// </summary>
+    public Notification ToNotification(string recipient) => new(recipient, Subject, Text, Html, Context?.Level, Context?.CategoryTitle);
 }
 
 /// <summary>
@@ -33,9 +40,14 @@ public sealed partial class MailTemplate
         ArgumentException.ThrowIfNullOrWhiteSpace(body);
         _subject = subject;
         _title = string.IsNullOrWhiteSpace(title) ? subject : title;
-        if (_subject.Contains("{{@", StringComparison.Ordinal) || _title.Contains("{{@", StringComparison.Ordinal))
+        if (_subject.Contains("{{@", StringComparison.Ordinal))
         {
             throw new ArgumentException("A list variable ({{@name}}) cannot be in the subject or in the title: only in the body.", nameof(subject));
+        }
+
+        if (_title.Contains("{{@", StringComparison.Ordinal))
+        {
+            throw new ArgumentException("A list variable ({{@name}}) cannot be in the subject or in the title: only in the body.", nameof(title));
         }
 
         _parts = Parse(body);
@@ -67,7 +79,7 @@ public sealed partial class MailTemplate
     {
         ArgumentNullException.ThrowIfNull(context);
         var (subject, title, blocks) = Build(values, lists);
-        return new RenderedMail(subject, MailLayout.RenderText(context, title, blocks), MailLayout.RenderHtml(context, title, blocks));
+        return new RenderedMail(subject, MailLayout.RenderText(context, title, blocks), MailLayout.RenderHtml(context, title, blocks), context);
     }
 
     private (string Subject, string Title, List<MailBlock> Blocks) Build(IReadOnlyDictionary<string, string> values, IReadOnlyDictionary<string, IReadOnlyList<string>>? lists)

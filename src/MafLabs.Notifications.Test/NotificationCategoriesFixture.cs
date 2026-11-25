@@ -80,10 +80,38 @@ public sealed class NotificationCategoriesFixture
         var categories = Portarr();
         var own = new CategoryPolicy { ReminderHours = 6 };
 
-        categories.PolicyFor("data").Should().BeSameAs(categories.Get("data").DefaultPolicy);
-        categories.PolicyFor("data", new Dictionary<string, CategoryPolicy>()).Should().BeSameAs(categories.Get("data").DefaultPolicy);
-        categories.PolicyFor("data", new Dictionary<string, CategoryPolicy> { ["data"] = own }).Should().BeSameAs(own);
-        categories.PolicyFor("apps", new Dictionary<string, CategoryPolicy> { ["data"] = own }).Should().BeSameAs(categories.Get("apps").DefaultPolicy);
+        categories.PolicyFor("data").Should().Be(categories.Get("data").DefaultPolicy);
+        categories.PolicyFor("data", new Dictionary<string, CategoryPolicy>()).Should().Be(categories.Get("data").DefaultPolicy);
+        categories.PolicyFor("data", new Dictionary<string, CategoryPolicy> { ["data"] = own }).Should().Be(own);
+        categories.PolicyFor("apps", new Dictionary<string, CategoryPolicy> { ["data"] = own }).Should().Be(categories.Get("apps").DefaultPolicy);
+    }
+
+    [Fact]
+    public void should_not_let_a_caller_change_a_validated_default()
+    {
+        var given = new CategoryPolicy { MaxPerDay = 2 };
+        var categories = new NotificationCategories().Add("data", "Data", "Backups", given);
+
+        given.MaxPerDay = 0;
+        categories.PolicyFor("data").MaxPerDay = 0;
+        categories.Get("data").DefaultPolicy.MaxPerDay = 0;
+        categories.Find("data")!.DefaultPolicy.MaxPerDay = 0;
+        categories.All[0].DefaultPolicy.MaxPerDay = 0;
+
+        categories.PolicyFor("data").MaxPerDay.Should().Be(2);
+        categories.PolicyFor("data").Should().NotBeSameAs(categories.PolicyFor("data"));
+    }
+
+    [Fact]
+    public void should_refuse_an_operator_policy_out_of_range_with_the_sentences_of_the_validator()
+    {
+        var categories = Portarr();
+        var corrupted = new Dictionary<string, CategoryPolicy> { ["data"] = new() { ReminderHours = 0, MaxPerDay = 5000 } };
+
+        var policy = () => categories.PolicyFor("data", corrupted);
+
+        policy.Should().Throw<InvalidOperationException>().WithMessage("*Category 'data': ReminderHours*Category 'data': MaxPerDay*");
+        categories.PolicyFor("apps", corrupted).Should().Be(categories.Get("apps").DefaultPolicy);
     }
 
     [Fact]
@@ -131,6 +159,23 @@ public sealed class NotificationCategoriesFixture
     }
 
     [Fact]
+    public void should_keep_every_declaration_whatever_the_overloads_and_their_order()
+    {
+        var services = new ServiceCollection();
+
+        services.AddNotifications(categories => categories.Add("apps", "Apps", "Applications"));
+        services.AddNotifications();
+        services.AddNotifications(categories => categories.Add("data", "Data", "Backups"));
+        services.AddNotifications(categories => categories.Add("maintenance", "Maintenance", "Updates"));
+        using var provider = services.BuildServiceProvider();
+
+        provider.GetServices<NotificationCategories>().Should().ContainSingle();
+        provider.GetRequiredService<NotificationCategories>().All.Select(category => category.Id).Should().Equal("apps", "data", "maintenance");
+        var again = () => services.AddNotifications(categories => categories.Add("data", "Data", "Twice"));
+        again.Should().Throw<ArgumentException>().WithMessage("*'data' is declared twice*");
+    }
+
+    [Fact]
     public void should_fail_at_startup_when_a_declaration_is_wrong()
     {
         var add = () => new ServiceCollection().AddNotifications(categories => categories.Add("data", "Data", "x").Add("data", "Data", "y"));
@@ -148,7 +193,20 @@ public sealed class NotificationCategoriesFixture
 
         var read = () => provider.GetRequiredService<IOptions<NotificationPolicyOptions>>().Value;
 
-        read.Should().Throw<OptionsValidationException>().WithMessage("*MaxPerDay*");
+        read.Should().Throw<OptionsValidationException>().WithMessage("*MaxPerDay is the most mails in 24 hours, all categories together, from 1 to 1000*");
+    }
+
+    [Fact]
+    public void should_validate_the_policy_options_at_startup()
+    {
+        var services = new ServiceCollection();
+        services.AddNotifications();
+        services.Configure<NotificationPolicyOptions>(options => options.ClearMinutes = 2000);
+        using var provider = services.BuildServiceProvider();
+
+        var start = () => provider.GetRequiredService<IStartupValidator>().Validate();
+
+        start.Should().Throw<OptionsValidationException>().WithMessage("*ClearMinutes*from 1 to 1440*");
     }
 
     [Fact]

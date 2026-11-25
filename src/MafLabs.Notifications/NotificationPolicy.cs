@@ -7,6 +7,12 @@ namespace MafLabs.Notifications;
 /// </summary>
 public sealed class NotificationPolicyOptions
 {
+    /// <summary>The largest number of minutes any of the delays can be (one day).</summary>
+    public const int MaxMinutes = 1440;
+
+    /// <summary>The most mails all categories together can be allowed in 24 hours.</summary>
+    public const int MaxPerDayLimit = 1000;
+
     /// <summary>Minutes a problem must last before it is mailed: a blip is not a mail (0 to 1440). 5 by default.</summary>
     public int ConfirmMinutes { get; set; } = 5;
 
@@ -19,11 +25,32 @@ public sealed class NotificationPolicyOptions
     /// <summary>The most mails tried in 24 hours, all categories together (1 to 1000). 10 by default.</summary>
     public int MaxPerDay { get; set; } = 10;
 
-    /// <summary>What is wrong with these settings, in a sentence, or null.</summary>
-    public string? Check() =>
-        ConfirmMinutes is < 0 or > 1440 || ClearMinutes is < 1 or > 1440 || RetryMinutes is < 1 or > 1440 || MaxPerDay is < 1 or > 1000
-            ? "Notification policy: ConfirmMinutes is 0 to 1440, ClearMinutes 1 to 1440, RetryMinutes 1 to 1440, MaxPerDay 1 to 1000."
-            : null;
+    /// <summary>What is wrong with these settings: one sentence per wrong setting (it names the setting and its allowed range), joined by a space, or null when all are right.</summary>
+    public string? Check()
+    {
+        var problems = new List<string>();
+        if (ConfirmMinutes is < 0 or > MaxMinutes)
+        {
+            problems.Add($"Notification policy: ConfirmMinutes is the minutes a problem must last before it is mailed, from 0 to {MaxMinutes}.");
+        }
+
+        if (ClearMinutes is < 1 or > MaxMinutes)
+        {
+            problems.Add($"Notification policy: ClearMinutes is the minutes a mailed problem must be gone before its episode ends, from 1 to {MaxMinutes}.");
+        }
+
+        if (RetryMinutes is < 1 or > MaxMinutes)
+        {
+            problems.Add($"Notification policy: RetryMinutes is the minutes to wait after a mail that could not be sent, from 1 to {MaxMinutes}.");
+        }
+
+        if (MaxPerDay is < 1 or > MaxPerDayLimit)
+        {
+            problems.Add($"Notification policy: MaxPerDay is the most mails in 24 hours, all categories together, from 1 to {MaxPerDayLimit}.");
+        }
+
+        return problems.Count == 0 ? null : string.Join(" ", problems);
+    }
 }
 
 /// <summary>Checks <see cref="NotificationPolicyOptions"/>, whether notifications are on or not: a value that could never work is refused.</summary>
@@ -41,6 +68,14 @@ public sealed class NotificationPolicyOptionsValidator : IValidateOptions<Notifi
 /// <param name="LastAttemptAt">When a mail was last tried, delivered or not, or null when none was.</param>
 public sealed record EpisodeState(DateTimeOffset StartedAt, DateTimeOffset LastSeenAt, int MailsSent, DateTimeOffset? LastMailedAt, DateTimeOffset? LastAttemptAt)
 {
+    /// <summary>
+    /// How many mails about it were delivered. Mails delivered with no date for the last one cannot be: <see cref="ArgumentException"/> when the state
+    /// is built, so that the application's store is told it is inconsistent.
+    /// </summary>
+    public int MailsSent { get; init; } = MailsSent > 0 && LastMailedAt is null
+        ? throw new ArgumentException("An episode with delivered mails (MailsSent > 0) needs the date of the last one (LastMailedAt).", nameof(LastMailedAt))
+        : MailsSent;
+
     /// <summary>The last try did not leave: it is later than the last mail that did.</summary>
     public bool LastAttemptFailed => LastAttemptAt is { } attempt && (LastMailedAt is null || attempt > LastMailedAt);
 }
@@ -117,7 +152,8 @@ public static class NotificationDecider
     /// <summary>
     /// Whether a mail is due now for a problem of <paramref name="level"/> in a category with <paramref name="policy"/>. The checks run in order, and the
     /// first that stops the mail is the reason: disabled, below the minimum level, not confirmed, paused after a failure, then (first mail or reminder due)
-    /// and last the daily caps.
+    /// and last the daily caps. When <paramref name="options"/> is null the defaults of <see cref="NotificationPolicyOptions"/> apply, not what the operator
+    /// configured: an application passes <c>IOptions&lt;NotificationPolicyOptions&gt;.Value</c>.
     /// </summary>
     public static NotificationDecision Decide(DateTimeOffset now, MailLevel level, CategoryPolicy policy, EpisodeState episode, MailsToday today, NotificationPolicyOptions? options = null)
     {
@@ -147,15 +183,16 @@ public static class NotificationDecider
             return Stop(DecisionReason.WaitingAfterFailure);
         }
 
-        var first = episode.MailsSent == 0 || episode.LastMailedAt is null;
+        var first = episode.MailsSent == 0;
         if (!first)
         {
+            var lastMailedAt = episode.LastMailedAt ?? throw new ArgumentException("An episode with delivered mails needs the date of the last one (LastMailedAt).", nameof(episode));
             if (episode.MailsSent > policy.MaxReminders)
             {
                 return Stop(DecisionReason.RemindersExhausted);
             }
 
-            if (now - episode.LastMailedAt!.Value < TimeSpan.FromHours(policy.ReminderHours))
+            if (now - lastMailedAt < TimeSpan.FromHours(policy.ReminderHours))
             {
                 return Stop(DecisionReason.ReminderNotDue);
             }
@@ -192,13 +229,6 @@ public static class NotificationDecider
 
         var lastSeen = episode.LastSeenAt > runStartedAt ? episode.LastSeenAt : runStartedAt;
         return now - lastSeen >= TimeSpan.FromMinutes(options.ClearMinutes);
-    }
-
-    /// <summary>The number of the reminder the next mail of the episode is: 0 for the first mail.</summary>
-    public static int ReminderOf(EpisodeState episode)
-    {
-        ArgumentNullException.ThrowIfNull(episode);
-        return episode.MailsSent;
     }
 
     /// <summary>Whether the program will write again about the episode after the mail it is about to send (for the sentence that ends the mail).</summary>

@@ -191,11 +191,16 @@ public sealed class NotificationDeciderFixture
     }
 
     [Fact]
-    public void should_treat_a_mail_without_a_date_as_the_first_one()
+    public void should_refuse_an_episode_with_mails_delivered_and_no_date_for_the_last()
     {
-        var odd = new EpisodeState(Start, Start, 2, null, null);
+        var odd = () => new EpisodeState(Start, Start, 2, null, null);
 
-        Decide(Start.AddHours(1), odd).Reason.Should().Be(DecisionReason.FirstMail);
+        odd.Should().Throw<ArgumentException>().WithMessage("*LastMailedAt*");
+        var fresh = Fresh() with { MailsSent = 0 };
+        Decide(Start.AddHours(1), fresh).Reason.Should().Be(DecisionReason.FirstMail);
+        var bypassed = Fresh() with { MailsSent = 2 };
+        var decide = () => Decide(Start.AddHours(1), bypassed);
+        decide.Should().Throw<ArgumentException>().WithMessage("*LastMailedAt*");
     }
 
     [Fact]
@@ -227,12 +232,10 @@ public sealed class NotificationDeciderFixture
     }
 
     [Fact]
-    public void should_number_the_reminders_and_say_whether_another_one_follows()
+    public void should_say_whether_another_reminder_follows()
     {
         var mailedAt = Start.AddMinutes(5);
 
-        NotificationDecider.ReminderOf(Fresh()).Should().Be(0);
-        NotificationDecider.ReminderOf(Mailed(2, mailedAt)).Should().Be(2);
         NotificationDecider.WillRemind(Fresh(), Policy).Should().BeTrue();
         NotificationDecider.WillRemind(Mailed(2, mailedAt), Policy).Should().BeTrue();
         NotificationDecider.WillRemind(Mailed(3, mailedAt), Policy).Should().BeFalse();
@@ -248,18 +251,30 @@ public sealed class NotificationDeciderFixture
     }
 
     [Theory]
-    [InlineData(-1, 15, 15, 10)]
-    [InlineData(5, 0, 15, 10)]
-    [InlineData(5, 15, 0, 10)]
-    [InlineData(5, 15, 15, 0)]
-    [InlineData(5, 15, 15, 1001)]
-    public void should_refuse_options_out_of_range(int confirm, int clear, int retry, int perDay)
+    [InlineData(-1, 15, 15, 10, "ConfirmMinutes is the minutes a problem must last before it is mailed, from 0 to 1440.")]
+    [InlineData(1441, 15, 15, 10, "ConfirmMinutes is the minutes a problem must last before it is mailed, from 0 to 1440.")]
+    [InlineData(5, 0, 15, 10, "ClearMinutes is the minutes a mailed problem must be gone before its episode ends, from 1 to 1440.")]
+    [InlineData(5, 1441, 15, 10, "ClearMinutes is the minutes a mailed problem must be gone before its episode ends, from 1 to 1440.")]
+    [InlineData(5, 15, 0, 10, "RetryMinutes is the minutes to wait after a mail that could not be sent, from 1 to 1440.")]
+    [InlineData(5, 15, 1441, 10, "RetryMinutes is the minutes to wait after a mail that could not be sent, from 1 to 1440.")]
+    [InlineData(5, 15, 15, 0, "MaxPerDay is the most mails in 24 hours, all categories together, from 1 to 1000.")]
+    [InlineData(5, 15, 15, 1001, "MaxPerDay is the most mails in 24 hours, all categories together, from 1 to 1000.")]
+    public void should_refuse_options_out_of_range_with_the_sentence_of_the_wrong_setting(int confirm, int clear, int retry, int perDay, string sentence)
     {
         var options = new NotificationPolicyOptions { ConfirmMinutes = confirm, ClearMinutes = clear, RetryMinutes = retry, MaxPerDay = perDay };
 
-        options.Check().Should().Contain("MaxPerDay");
+        options.Check().Should().Be("Notification policy: " + sentence);
         var result = new NotificationPolicyOptionsValidator().Validate(null, options);
         result.Failed.Should().BeTrue();
+        result.FailureMessage.Should().Be("Notification policy: " + sentence);
+    }
+
+    [Fact]
+    public void should_say_every_wrong_option_not_only_the_first()
+    {
+        var options = new NotificationPolicyOptions { ConfirmMinutes = -1, MaxPerDay = 0 };
+
+        options.Check().Should().Contain("ConfirmMinutes").And.Contain("MaxPerDay").And.NotContain("ClearMinutes");
     }
 
     [Theory]

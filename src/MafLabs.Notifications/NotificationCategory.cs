@@ -71,27 +71,32 @@ public static class CategoryPolicyValidator
 /// <param name="Title">The display name (<c>Data</c>), shown in the mail footer and in the settings.</param>
 /// <param name="Description">One sentence that says what the category writes about, for the settings page.</param>
 /// <param name="DefaultPolicy">The policy that applies until the operator changes it.</param>
-public sealed record NotificationCategory(string Id, string Title, string Description, CategoryPolicy DefaultPolicy);
+public sealed record NotificationCategory(string Id, string Title, string Description, CategoryPolicy DefaultPolicy)
+{
+    /// <summary>The most characters an id can have.</summary>
+    public const int MaxIdLength = 40;
+}
 
 /// <summary>
 /// The categories a program declares at startup (see <c>AddNotifications</c>). A duplicate id, an id that is not well formed or a default policy that
-/// is out of range is refused when it is added, not later when a mail is due. Fill it during startup, then only read it.
+/// is out of range is refused when it is added, not later when a mail is due. Fill it during startup, then only read it. It keeps its own copy of
+/// every category it is given and hands out copies, so that nobody can change a validated default afterwards.
 /// </summary>
 public sealed partial class NotificationCategories
 {
     private readonly Dictionary<string, NotificationCategory> _byId = new(StringComparer.Ordinal);
     private readonly List<NotificationCategory> _ordered = [];
 
-    /// <summary>The categories, in the order they were declared.</summary>
-    public IReadOnlyList<NotificationCategory> All => _ordered;
+    /// <summary>The categories, in the order they were declared (copies).</summary>
+    public IReadOnlyList<NotificationCategory> All => [.. _ordered.Select(Copy)];
 
     /// <summary>Declares a category. Returns this collection, so that declarations chain.</summary>
     public NotificationCategories Add(NotificationCategory category)
     {
         ArgumentNullException.ThrowIfNull(category);
-        if (category.Id is null || !IdPattern().IsMatch(category.Id))
+        if (category.Id is null || category.Id.Length > NotificationCategory.MaxIdLength || !IdPattern().IsMatch(category.Id))
         {
-            throw new ArgumentException($"A category id is lower case letters, digits and hyphens, starting with a letter, 40 characters at most: '{category.Id}' is not.", nameof(category));
+            throw new ArgumentException($"A category id is lower case letters, digits and hyphens, starting with a letter, {NotificationCategory.MaxIdLength} characters at most: '{category.Id}' is not.", nameof(category));
         }
 
         if (string.IsNullOrWhiteSpace(category.Title) || string.IsNullOrWhiteSpace(category.Description))
@@ -110,12 +115,13 @@ public sealed partial class NotificationCategories
             throw new ArgumentException(string.Join(" ", problems), nameof(category));
         }
 
-        if (!_byId.TryAdd(category.Id, category))
+        var own = Copy(category);
+        if (!_byId.TryAdd(own.Id, own))
         {
             throw new ArgumentException($"Category '{category.Id}' is declared twice: each id is declared once.", nameof(category));
         }
 
-        _ordered.Add(category);
+        _ordered.Add(own);
         return this;
     }
 
@@ -126,20 +132,33 @@ public sealed partial class NotificationCategories
     /// <summary>Whether a category of this id is declared.</summary>
     public bool Contains(string id) => _byId.ContainsKey(id);
 
-    /// <summary>The category of this id, or null when it is not declared.</summary>
-    public NotificationCategory? Find(string id) => _byId.GetValueOrDefault(id);
+    /// <summary>The category of this id (a copy), or null when it is not declared.</summary>
+    public NotificationCategory? Find(string id) => _byId.TryGetValue(id, out var category) ? Copy(category) : null;
 
-    /// <summary>The category of this id. An id nobody declared is a mistake of the program: it is told, with the ids that exist.</summary>
+    /// <summary>The category of this id (a copy). An id nobody declared is a mistake of the program: it is told, with the ids that exist.</summary>
     public NotificationCategory Get(string id) =>
         Find(id) ?? throw new KeyNotFoundException($"There is no notification category '{id}'. Declared: {(_ordered.Count == 0 ? "none" : string.Join(", ", _ordered.Select(category => category.Id)))}.");
 
     /// <summary>
-    /// The policy that applies to a category: the operator's when there is one for it, the category's default otherwise. The operator's policies are
-    /// kept by the application, by category id.
+    /// The policy that applies to a category (a copy): the operator's when there is one for it, the category's default otherwise. The operator's policies
+    /// are kept by the application, by category id. The application validates a policy when the operator saves it; the one used here is validated again
+    /// (<see cref="CategoryPolicyValidator"/>) so that a corrupted store cannot slip a value out of range into the decision: it throws
+    /// <see cref="InvalidOperationException"/> with the sentences of the validator.
     /// </summary>
-    public CategoryPolicy PolicyFor(string id, IReadOnlyDictionary<string, CategoryPolicy>? operatorPolicies = null) =>
-        operatorPolicies is not null && operatorPolicies.TryGetValue(id, out var own) && Find(id) is not null ? own : Get(id).DefaultPolicy;
+    public CategoryPolicy PolicyFor(string id, IReadOnlyDictionary<string, CategoryPolicy>? operatorPolicies = null)
+    {
+        var category = Get(id);
+        if (operatorPolicies is null || !operatorPolicies.TryGetValue(id, out var own) || own is null)
+        {
+            return category.DefaultPolicy;
+        }
 
-    [GeneratedRegex("^[a-z][a-z0-9-]{0,39}$")]
+        var problems = CategoryPolicyValidator.Validate(id, own);
+        return problems.Count > 0 ? throw new InvalidOperationException(string.Join(" ", problems)) : own with { };
+    }
+
+    private static NotificationCategory Copy(NotificationCategory category) => category with { DefaultPolicy = category.DefaultPolicy with { } };
+
+    [GeneratedRegex("^[a-z][a-z0-9-]*$")]
     private static partial Regex IdPattern();
 }

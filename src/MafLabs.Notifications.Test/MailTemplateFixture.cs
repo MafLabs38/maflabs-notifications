@@ -217,5 +217,17 @@ public sealed class MailTemplateFixture
         notification.Recipient.Should().Be("operator@homelab.example");
         notification.Body.Should().Contain("- alpha: failing");
         notification.HtmlBody.Should().StartWith("<!DOCTYPE html>");
+        notification.Level.Should().Be(Context.Level);
+        notification.Category.Should().Be(Context.CategoryTitle);
+    }
+
+    [Fact]
+    public void should_name_the_title_when_the_title_holds_a_list_variable()
+    {
+        var create = () => new MailTemplate("Subject", "Body", "{{@title}}");
+
+        create.Should().Throw<ArgumentException>().Which.ParamName.Should().Be("title");
+        var subject = () => new MailTemplate("{{@subject}}", "Body");
+        subject.Should().Throw<ArgumentException>().Which.ParamName.Should().Be("subject");
     }
 }

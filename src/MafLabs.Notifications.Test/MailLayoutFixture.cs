@@ -148,4 +148,43 @@ public sealed class MailLayoutFixture
         ((Action)(() => MailLayout.RenderHtml(new MailContext("P", "C", MailLevel.Ok), "t", null!))).Should().Throw<ArgumentNullException>();
         ((Action)(() => MailLayout.RenderText(new MailContext("P", "C", MailLevel.Ok), "t", null!))).Should().Throw<ArgumentNullException>();
     }
+
+    [Fact]
+    public void should_cap_a_list_and_say_how_many_more_in_the_text_and_in_the_html()
+    {
+        var items = Enumerable.Range(1, MailLayout.MaxItems + 3).Select(number => $"item-{number}").ToList();
+        var context = new MailContext("P", "C", MailLevel.Info);
+
+        var text = MailLayout.RenderText(context, "t", [new MailItems(items)]);
+        var html = MailLayout.RenderHtml(context, "t", [new MailItems(items)]);
+
+        text.Should().Contain("- item-50\n- and 3 more\n").And.NotContain("item-51");
+        html.Should().Contain("item-50</li>").And.Contain(">and 3 more</li>").And.NotContain("item-51");
+        Regex.Matches(html, "<li ").Should().HaveCount(MailLayout.MaxItems + 1);
+        MailLayout.RenderText(context, "t", [new MailItems(items.Take(MailLayout.MaxItems).ToList())]).Should().NotContain("more");
+    }
+
+    [Fact]
+    public void should_drop_empty_items_and_refuse_nulls_with_an_argument_exception()
+    {
+        var context = new MailContext("P", "C", MailLevel.Info);
+
+        MailLayout.RenderText(context, "t", [new MailItems(["a", " ", "", null!, "b"])]).Should().Contain("- a\n- b\n");
+        ((Action)(() => MailLayout.RenderText(context, "t", [new MailItems(null!)]))).Should().Throw<ArgumentNullException>();
+        ((Action)(() => MailLayout.RenderHtml(context, "t", [new MailItems(null!)]))).Should().Throw<ArgumentNullException>();
+        ((Action)(() => MailLayout.RenderHtml(new MailContext(null!, "C", MailLevel.Info), "t", []))).Should().Throw<ArgumentNullException>();
+        ((Action)(() => MailLayout.RenderText(new MailContext("P", null!, MailLevel.Info), "t", []))).Should().Throw<ArgumentNullException>();
+        ((Action)(() => MailLayout.RenderText(context, null!, []))).Should().Throw<ArgumentNullException>();
+        ((Action)(() => MailLayout.FooterOf(null!))).Should().Throw<ArgumentNullException>();
+    }
+
+    [Fact]
+    public void should_remove_the_unicode_format_characters_from_every_value()
+    {
+        const string Tricky = "pa\u202Eid\u2066x\u2069\u200B\u200C\u200D\uFEFFy";
+
+        MailText.Clean(Tricky, singleLine: true).Should().Be("paidxy");
+        MailLayout.RenderText(new MailContext("P", "C", MailLevel.Info), "t", [new MailParagraph(Tricky)]).Should().Contain("paidxy").And.NotContain("\u202E");
+        MailLayout.RenderHtml(new MailContext("P", "C", MailLevel.Info), "t", [new MailParagraph(Tricky)]).Should().Contain("paidxy").And.NotContain("\u202E");
+    }
 }
