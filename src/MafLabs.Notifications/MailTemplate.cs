@@ -16,11 +16,11 @@ public sealed record RenderedMail(string Subject, string Title, IReadOnlyList<Me
     public string Html => MailLayout.RenderHtml(Context, Title, Blocks);
 
     /// <summary>
-    /// The notification that carries this message to one recipient: the bare text as <see cref="Notification.Body"/> (no mail framing), the level and the
-    /// category title, and the blocks as <see cref="Notification.Content"/> for a provider that dresses them.
+    /// The notification that carries this message to one recipient: the bare text as <see cref="Notification.Body"/> (no mail framing), the level, the
+    /// category title and id, and the blocks as <see cref="Notification.Content"/> for a provider that dresses them.
     /// </summary>
     public Notification ToNotification(string recipient) =>
-        new(recipient, Subject, MailLayout.BodyText(Blocks), Context.Level, Context.CategoryTitle, new NotificationContent(Context.Product, Title, Blocks));
+        new(recipient, Subject, MailLayout.BodyText(Blocks), Context.Level, Context.CategoryTitle, new NotificationContent(Context.Product, Title, Blocks), Context.CategoryId);
 }
 
 /// <summary>

@@ -51,6 +51,7 @@ public sealed class NotificationCategoriesFixture
     [Theory]
     [InlineData("")]
     [InlineData("Data")]
+    [InlineData("data\n")]
     [InlineData("1data")]
     [InlineData("da ta")]
     [InlineData("data_x")]

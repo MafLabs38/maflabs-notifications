@@ -159,6 +159,6 @@ public sealed partial class NotificationCategories
 
     private static NotificationCategory Copy(NotificationCategory category) => category with { DefaultPolicy = category.DefaultPolicy with { } };
 
-    [GeneratedRegex("^[a-z][a-z0-9-]*$")]
+    [GeneratedRegex(@"^[a-z][a-z0-9-]*\z")]
     private static partial Regex IdPattern();
 }

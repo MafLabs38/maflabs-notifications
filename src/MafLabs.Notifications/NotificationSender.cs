@@ -13,8 +13,9 @@ namespace MafLabs.Notifications;
 /// <param name="Body">The plain text of the message, with no header, signature or footer.</param>
 /// <param name="Level">How much it matters, or null when not known.</param>
 /// <param name="Category">The display name of the category it belongs to, or null when not known.</param>
+/// <param name="CategoryId">The stable key of the category (<c>data</c>, the key of the settings and of the log), for a channel that routes by category; null when not known.</param>
 /// <param name="Content">The message as blocks, or null for a message that is only a subject and a text. Build it with <see cref="MailTemplate"/>.</param>
-public sealed record Notification(string Recipient, string Subject, string Body, NotificationLevel? Level = null, string? Category = null, NotificationContent? Content = null);
+public sealed record Notification(string Recipient, string Subject, string Body, NotificationLevel? Level = null, string? Category = null, NotificationContent? Content = null, string? CategoryId = null);
 
 /// <summary>Whether a notification was handed over, and when it was not, why in a short sentence (never a secret).</summary>
 public sealed record NotificationResult(bool Delivered, string? Reason = null)

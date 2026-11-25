@@ -7,7 +7,8 @@ namespace MafLabs.Notifications;
 /// <param name="Product">The name of the program that writes (for example <c>Orders</c>), shown in the header band and in the footer.</param>
 /// <param name="CategoryTitle">The display name of the category (<c>Data</c>), shown beside the level and in the footer.</param>
 /// <param name="Level">The accent of the mail.</param>
-public sealed record MailContext(string Product, string CategoryTitle, NotificationLevel Level);
+/// <param name="CategoryId">The stable key of the category (<c>data</c>), carried to <see cref="Notification.CategoryId"/> for a channel that routes by category; not shown in the mail.</param>
+public sealed record MailContext(string Product, string CategoryTitle, NotificationLevel Level, string? CategoryId = null);
 
 /// <summary>
 /// The look of every mail: one HTML document and its text alternative, from the same content. The HTML is made to survive the mail clients:

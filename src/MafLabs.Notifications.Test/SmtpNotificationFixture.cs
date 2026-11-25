@@ -159,6 +159,24 @@ public sealed class SmtpNotificationFixture : IDisposable
         received.Should().Contain("charset=utf-8");
     }
 
+    [Theory]
+    [InlineData("", "Title", "Data")]
+    [InlineData("Portarr", " ", "Data")]
+    [InlineData("Portarr", "Title", null)]
+    public async Task should_refuse_a_content_that_is_incomplete_without_sending_anything(string product, string title, string? category)
+    {
+        using var server = new MailServer();
+        var options = Settings(server.Port, "127.0.0.1");
+        options.Smtp.StartTls = false;
+        var content = new NotificationContent(product, title, [new MessageParagraph("text")]);
+
+        var result = await new SmtpNotificationSender(Options.Create(options)).SendAsync(new Notification("me@homelab.example", "s", "b", NotificationLevel.Info, category, content), Token);
+
+        result.Delivered.Should().BeFalse();
+        result.Reason.Should().Contain("incomplete");
+        server.Received.ToString().Should().BeEmpty();
+    }
+
     [Fact]
     public async Task should_send_a_plain_text_mail_when_there_is_no_content()
     {

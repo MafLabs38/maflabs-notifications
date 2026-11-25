@@ -56,7 +56,7 @@ public sealed class MailTemplateFixture
         create.Should().Throw<ArgumentException>();
     }
 
-    private static readonly MailContext Context = new("Portarr", "Data", NotificationLevel.Danger);
+    private static readonly MailContext Context = new("Portarr", "Data", NotificationLevel.Danger, "data");
 
     private static readonly MailTemplate Backups = new(
         "Portarr: backups {{state}}",
@@ -219,7 +219,9 @@ public sealed class MailTemplateFixture
         notification.Body.Should().NotContain("[Critical]").And.NotContain("-- ").And.NotContain("you receive this");
         notification.Content.Should().NotBeNull();
         notification.Content!.Product.Should().Be(Context.Product);
+        notification.Content.Title.Should().Be("Backups are failing");
         notification.Content.Blocks.Should().NotBeEmpty();
+        notification.CategoryId.Should().Be(Context.CategoryId);
         notification.Level.Should().Be(Context.Level);
         notification.Category.Should().Be(Context.CategoryTitle);
     }
