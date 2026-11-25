@@ -56,7 +56,7 @@ public sealed class MailTemplateFixture
         create.Should().Throw<ArgumentException>();
     }
 
-    private static readonly MailContext Context = new("Portarr", "Data", MailLevel.Danger);
+    private static readonly MailContext Context = new("Portarr", "Data", NotificationLevel.Danger);
 
     private static readonly MailTemplate Backups = new(
         "Portarr: backups {{state}}",

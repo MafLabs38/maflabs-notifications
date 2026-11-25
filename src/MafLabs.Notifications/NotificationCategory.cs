@@ -3,9 +3,9 @@ using System.Text.RegularExpressions;
 namespace MafLabs.Notifications;
 
 /// <summary>
-/// How one category of notifications behaves, so that the operator can tune each one apart: Portarr's <c>data</c> mails can be daily while its
+/// How one category of notifications behaves, so that the operator can tune each one apart: the <c>data</c> mails can be daily while the
 /// <c>maintenance</c> mails are off. A plain settings class (bind it from configuration or from what the operator edits); <see cref="CategoryPolicyValidator"/>
-/// says what is wrong with one. The defaults are the ones Portarr and Mnemarr settled on.
+/// says what is wrong with one. The defaults suit a small installation: one mail per problem, at most daily reminders, a few per day.
 /// </summary>
 public sealed record CategoryPolicy
 {
@@ -21,8 +21,8 @@ public sealed record CategoryPolicy
     /// <summary>Whether the category writes at all. On by default.</summary>
     public bool Enabled { get; set; } = true;
 
-    /// <summary>The lowest level that writes: a problem below it stays on the pages. <see cref="MailLevel.Warning"/> by default.</summary>
-    public MailLevel MinimumLevel { get; set; } = MailLevel.Warning;
+    /// <summary>The lowest level that writes: a problem below it stays on the pages. <see cref="NotificationLevel.Warning"/> by default.</summary>
+    public NotificationLevel MinimumLevel { get; set; } = NotificationLevel.Warning;
 
     /// <summary>Hours between two reminders while a problem lasts (1 to 720). 24 by default: at most daily.</summary>
     public int ReminderHours { get; set; } = 24;
@@ -44,7 +44,7 @@ public static class CategoryPolicyValidator
         var problems = new List<string>();
         if (!Enum.IsDefined(policy.MinimumLevel))
         {
-            problems.Add($"Category '{categoryId}': MinimumLevel must be one of {string.Join(", ", Enum.GetNames<MailLevel>())}.");
+            problems.Add($"Category '{categoryId}': MinimumLevel must be one of {string.Join(", ", Enum.GetNames<NotificationLevel>())}.");
         }
 
         if (policy.ReminderHours is < 1 or > CategoryPolicy.MaxReminderHours)

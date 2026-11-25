@@ -16,7 +16,7 @@ namespace MafLabs.Notifications;
 /// </param>
 /// <param name="Level">How much it matters, for a channel that has no HTML to show it with, or null when not known.</param>
 /// <param name="Category">The display name of the category it belongs to, or null when not known.</param>
-public sealed record Notification(string Recipient, string Subject, string Body, string? HtmlBody = null, MailLevel? Level = null, string? Category = null);
+public sealed record Notification(string Recipient, string Subject, string Body, string? HtmlBody = null, NotificationLevel? Level = null, string? Category = null);
 
 /// <summary>Whether a notification was handed over, and when it was not, why in a short sentence (never a secret).</summary>
 public sealed record NotificationResult(bool Delivered, string? Reason = null)

@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 
@@ -8,7 +9,7 @@ public sealed class NotificationCategoriesFixture
 {
     private static NotificationCategories Portarr() => new NotificationCategories()
         .Add("apps", "Apps", "Applications that are down")
-        .Add("data", "Data", "Backups that fail or are late", new CategoryPolicy { MinimumLevel = MailLevel.Danger, MaxPerDay = 2 })
+        .Add("data", "Data", "Backups that fail or are late", new CategoryPolicy { MinimumLevel = NotificationLevel.Danger, MaxPerDay = 2 })
         .Add("maintenance", "Maintenance", "Updates to apply", new CategoryPolicy { Enabled = false });
 
     [Fact]
@@ -128,7 +129,7 @@ public sealed class NotificationCategoriesFixture
         var policy = new CategoryPolicy();
 
         policy.Enabled.Should().BeTrue();
-        policy.MinimumLevel.Should().Be(MailLevel.Warning);
+        policy.MinimumLevel.Should().Be(NotificationLevel.Warning);
         policy.ReminderHours.Should().Be(24);
         policy.MaxReminders.Should().Be(3);
         policy.MaxPerDay.Should().Be(3);
@@ -181,6 +182,26 @@ public sealed class NotificationCategoriesFixture
         var add = () => new ServiceCollection().AddNotifications(categories => categories.Add("data", "Data", "x").Add("data", "Data", "y"));
 
         add.Should().Throw<ArgumentException>();
+    }
+
+    [Fact]
+    public void should_bind_the_policy_options_from_the_notifications_policy_section()
+    {
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Notifications:Policy:ConfirmMinutes"] = "2",
+            ["Notifications:Policy:ClearMinutes"] = "30",
+            ["Notifications:Policy:RetryMinutes"] = "45",
+            ["Notifications:Policy:MaxPerDay"] = "7",
+        }).Build();
+        var services = new ServiceCollection();
+        services.AddSingleton<IConfiguration>(configuration);
+        services.AddNotifications();
+        using var provider = services.BuildServiceProvider();
+
+        var options = provider.GetRequiredService<IOptions<NotificationPolicyOptions>>().Value;
+
+        options.Should().BeEquivalentTo(new NotificationPolicyOptions { ConfirmMinutes = 2, ClearMinutes = 30, RetryMinutes = 45, MaxPerDay = 7 });
     }
 
     [Fact]

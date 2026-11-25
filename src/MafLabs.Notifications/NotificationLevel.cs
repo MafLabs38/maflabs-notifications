@@ -1,10 +1,10 @@
 namespace MafLabs.Notifications;
 
 /// <summary>
-/// How much a mail matters, from the least to the most. It colors the accent of the mail and is what a category's
+/// How much a notification matters, from the least to the most, whatever the channel (a mail, a chat message or a push all use it). In a mail it colors the accent, and it is what a category's
 /// <see cref="CategoryPolicy.MinimumLevel"/> is compared with: a category set to <see cref="Warning"/> stays silent about <see cref="Info"/> and <see cref="Ok"/>.
 /// </summary>
-public enum MailLevel
+public enum NotificationLevel
 {
     /// <summary>Good news: a problem is over, a check passed. Green.</summary>
     Ok = 0,

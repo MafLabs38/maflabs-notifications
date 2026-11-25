@@ -5,7 +5,7 @@ public sealed class NotificationDeciderFixture
 {
     private static readonly DateTimeOffset Start = new(2026, 11, 20, 8, 0, 0, TimeSpan.Zero);
 
-    private static readonly CategoryPolicy Policy = new() { ReminderHours = 24, MaxReminders = 3, MaxPerDay = 3, MinimumLevel = MailLevel.Warning };
+    private static readonly CategoryPolicy Policy = new() { ReminderHours = 24, MaxReminders = 3, MaxPerDay = 3, MinimumLevel = NotificationLevel.Warning };
 
     private static readonly MailsToday Quiet = new(0, 0);
 
@@ -14,7 +14,7 @@ public sealed class NotificationDeciderFixture
     private static EpisodeState Mailed(int mails, DateTimeOffset lastMailedAt, DateTimeOffset? lastAttemptAt = null) =>
         new(Start, lastMailedAt, mails, lastMailedAt, lastAttemptAt ?? lastMailedAt);
 
-    private static NotificationDecision Decide(DateTimeOffset now, EpisodeState episode, CategoryPolicy? policy = null, MailsToday? today = null, MailLevel level = MailLevel.Danger, NotificationPolicyOptions? options = null) =>
+    private static NotificationDecision Decide(DateTimeOffset now, EpisodeState episode, CategoryPolicy? policy = null, MailsToday? today = null, NotificationLevel level = NotificationLevel.Danger, NotificationPolicyOptions? options = null) =>
         NotificationDecider.Decide(now, level, policy ?? Policy, episode, today ?? Quiet, options);
 
     [Fact]
@@ -50,14 +50,14 @@ public sealed class NotificationDeciderFixture
     }
 
     [Theory]
-    [InlineData(MailLevel.Ok, MailLevel.Warning, false)]
-    [InlineData(MailLevel.Info, MailLevel.Warning, false)]
-    [InlineData(MailLevel.Warning, MailLevel.Warning, true)]
-    [InlineData(MailLevel.Danger, MailLevel.Warning, true)]
-    [InlineData(MailLevel.Warning, MailLevel.Danger, false)]
-    [InlineData(MailLevel.Danger, MailLevel.Danger, true)]
-    [InlineData(MailLevel.Ok, MailLevel.Ok, true)]
-    public void should_write_only_from_the_minimum_level_up(MailLevel level, MailLevel minimum, bool sends)
+    [InlineData(NotificationLevel.Ok, NotificationLevel.Warning, false)]
+    [InlineData(NotificationLevel.Info, NotificationLevel.Warning, false)]
+    [InlineData(NotificationLevel.Warning, NotificationLevel.Warning, true)]
+    [InlineData(NotificationLevel.Danger, NotificationLevel.Warning, true)]
+    [InlineData(NotificationLevel.Warning, NotificationLevel.Danger, false)]
+    [InlineData(NotificationLevel.Danger, NotificationLevel.Danger, true)]
+    [InlineData(NotificationLevel.Ok, NotificationLevel.Ok, true)]
+    public void should_write_only_from_the_minimum_level_up(NotificationLevel level, NotificationLevel minimum, bool sends)
     {
         var decision = Decide(Start.AddHours(1), Fresh(), Policy with { MinimumLevel = minimum }, level: level);
 
@@ -294,7 +294,7 @@ public sealed class NotificationDeciderFixture
     [Fact]
     public void should_refuse_a_level_that_does_not_exist()
     {
-        CategoryPolicyValidator.Validate("data", new CategoryPolicy { MinimumLevel = (MailLevel)42 }).Should().ContainSingle().Which.Should().Contain("MinimumLevel").And.Contain("Danger");
+        CategoryPolicyValidator.Validate("data", new CategoryPolicy { MinimumLevel = (NotificationLevel)42 }).Should().ContainSingle().Which.Should().Contain("MinimumLevel").And.Contain("Danger");
     }
 
     [Fact]

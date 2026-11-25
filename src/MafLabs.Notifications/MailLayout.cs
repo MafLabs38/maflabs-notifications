@@ -4,10 +4,10 @@ using System.Text;
 namespace MafLabs.Notifications;
 
 /// <summary>What a mail is about, once for every mail of a program: who writes, for which category, and how much it matters.</summary>
-/// <param name="Product">The name of the program that writes (<c>Portarr</c>), shown in the header band and in the footer.</param>
+/// <param name="Product">The name of the program that writes (for example <c>Orders</c>), shown in the header band and in the footer.</param>
 /// <param name="CategoryTitle">The display name of the category (<c>Data</c>), shown beside the level and in the footer.</param>
 /// <param name="Level">The accent of the mail.</param>
-public sealed record MailContext(string Product, string CategoryTitle, MailLevel Level);
+public sealed record MailContext(string Product, string CategoryTitle, NotificationLevel Level);
 
 /// <summary>A part of the body of a mail, in the order it is written. Plain text in, the layout does the encoding for each format.</summary>
 public abstract record MailBlock
@@ -40,22 +40,22 @@ public static class MailLayout
     private const string Font = "-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
 
     /// <summary>The accent color of a level, as a hex color: dark enough to carry white text.</summary>
-    public static string AccentOf(MailLevel level) => level switch
+    public static string AccentOf(NotificationLevel level) => level switch
     {
-        MailLevel.Ok => "#15803d",
-        MailLevel.Info => "#1d4ed8",
-        MailLevel.Warning => "#b45309",
-        MailLevel.Danger => "#b91c1c",
+        NotificationLevel.Ok => "#15803d",
+        NotificationLevel.Info => "#1d4ed8",
+        NotificationLevel.Warning => "#b45309",
+        NotificationLevel.Danger => "#b91c1c",
         _ => throw new ArgumentOutOfRangeException(nameof(level), level, "Unknown mail level."),
     };
 
     /// <summary>The word that names a level in the mail, in the header band and in the text.</summary>
-    public static string LabelOf(MailLevel level) => level switch
+    public static string LabelOf(NotificationLevel level) => level switch
     {
-        MailLevel.Ok => "OK",
-        MailLevel.Info => "Information",
-        MailLevel.Warning => "Warning",
-        MailLevel.Danger => "Critical",
+        NotificationLevel.Ok => "OK",
+        NotificationLevel.Info => "Information",
+        NotificationLevel.Warning => "Warning",
+        NotificationLevel.Danger => "Critical",
         _ => throw new ArgumentOutOfRangeException(nameof(level), level, "Unknown mail level."),
     };
 

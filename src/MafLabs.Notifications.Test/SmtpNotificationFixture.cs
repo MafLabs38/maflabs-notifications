@@ -180,7 +180,7 @@ public sealed class SmtpNotificationFixture : IDisposable
         var options = Settings(server.Port, "127.0.0.1");
         options.Smtp.StartTls = false;
         var template = new MailTemplate("Portarr: backups {{state}}", "Backups are {{state}}:\n\n{{@subjects}}", "Backups are {{state}}");
-        var mail = template.RenderMail(new MailContext("Portarr", "Data", MailLevel.Danger), new Dictionary<string, string> { ["state"] = "failing" }, new Dictionary<string, IReadOnlyList<string>> { ["subjects"] = ["alpha", "<b>beta</b>"] });
+        var mail = template.RenderMail(new MailContext("Portarr", "Data", NotificationLevel.Danger), new Dictionary<string, string> { ["state"] = "failing" }, new Dictionary<string, IReadOnlyList<string>> { ["subjects"] = ["alpha", "<b>beta</b>"] });
 
         var result = await new SmtpNotificationSender(Options.Create(options)).SendAsync(mail.ToNotification("me@homelab.example"), Token);
 

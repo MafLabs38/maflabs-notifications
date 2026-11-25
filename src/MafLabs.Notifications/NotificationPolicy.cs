@@ -140,7 +140,7 @@ public sealed record NotificationDecision(NotificationAction Action, DecisionRea
 }
 
 /// <summary>
-/// When to write, as functions of the clock and of plain values (ADR 0022 of Portarr, ADR 0042 of Mnemarr): one mail when a problem has lasted long enough
+/// When to write, as functions of the clock and of plain values (the rules below): one mail when a problem has lasted long enough
 /// to be an episode, a reminder at most once per interval and at most a few times while it lasts, nothing when it ends, a pause after a mail that
 /// could not leave, and a cap per day for the category and for all. No clock, no storage, no log: the application reads its own store, asks, and records.
 /// </summary>
@@ -153,9 +153,11 @@ public static class NotificationDecider
     /// Whether a mail is due now for a problem of <paramref name="level"/> in a category with <paramref name="policy"/>. The checks run in order, and the
     /// first that stops the mail is the reason: disabled, below the minimum level, not confirmed, paused after a failure, then (first mail or reminder due)
     /// and last the daily caps. When <paramref name="options"/> is null the defaults of <see cref="NotificationPolicyOptions"/> apply, not what the operator
-    /// configured: an application passes <c>IOptions&lt;NotificationPolicyOptions&gt;.Value</c>.
+    /// configured: an application passes <c>IOptions&lt;NotificationPolicyOptions&gt;.Value</c>. <c>Decide</c> knows only the category switch
+    /// (<see cref="CategoryPolicy.Enabled"/>), not the global <see cref="NotificationOptions.Enabled"/>: the application must not call it, or must not send,
+    /// when that one is false (the sender refuses to send then).
     /// </summary>
-    public static NotificationDecision Decide(DateTimeOffset now, MailLevel level, CategoryPolicy policy, EpisodeState episode, MailsToday today, NotificationPolicyOptions? options = null)
+    public static NotificationDecision Decide(DateTimeOffset now, NotificationLevel level, CategoryPolicy policy, EpisodeState episode, MailsToday today, NotificationPolicyOptions? options = null)
     {
         ArgumentNullException.ThrowIfNull(policy);
         ArgumentNullException.ThrowIfNull(episode);
