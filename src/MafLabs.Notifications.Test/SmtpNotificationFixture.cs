@@ -105,6 +105,92 @@ public sealed class SmtpNotificationFixture : IDisposable
         server.Received.ToString().Should().Contain("MAIL FROM:<app@homelab.example>").And.Contain("RCPT TO:<me@homelab.example>").And.Contain("Subject: Mnemarr: gemini needs you").And.Contain(Convert.ToBase64String(Encoding.UTF8.GetBytes("gemini needs you to sign in again.")), "the text travels encoded");
     }
 
+    /// <summary>The parts of a multipart message as the server of this test received it: the content type of each and its decoded text.</summary>
+    private static List<(string ContentType, string Text)> Parts(string received)
+    {
+        var boundary = System.Text.RegularExpressions.Regex.Match(received, "Content-Type: multipart/alternative;\\s*boundary=\"?([^\"\\r\\n;]+)\"?", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Singleline).Groups[1].Value;
+        var parts = new List<(string, string)>();
+        foreach (var chunk in received.Split("--" + boundary).Skip(1))
+        {
+            var lines = chunk.Split('\n').Select(line => line.TrimEnd('\r')).ToArray();
+            var blank = Array.IndexOf(lines, string.Empty, 1);
+            if (blank < 0 || !lines[1].StartsWith("Content-Type:", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var headers = string.Join('\n', lines[1..blank]);
+            var contentType = System.Text.RegularExpressions.Regex.Match(headers, "Content-Type: ([^;\\n]+)", System.Text.RegularExpressions.RegexOptions.IgnoreCase).Groups[1].Value;
+            var body = string.Concat(lines[(blank + 1)..]).Trim();
+            body = body.EndsWith("--", StringComparison.Ordinal) ? body[..^2] : body;
+            if (headers.Contains("base64", StringComparison.OrdinalIgnoreCase))
+            {
+                parts.Add((contentType, Encoding.UTF8.GetString(Convert.FromBase64String(body))));
+            }
+            else
+            {
+                parts.Add((contentType, body));
+            }
+        }
+
+        return parts;
+    }
+
+    [Fact]
+    public async Task should_send_the_text_and_the_html_as_alternatives_of_one_mail_when_there_is_html()
+    {
+        using var server = new MailServer();
+        var options = Settings(server.Port, "127.0.0.1");
+        options.Smtp.StartTls = false;
+        var html = "<!DOCTYPE html><html><body><p>Caf\u00e9 \u2713 &amp; the <b>backups</b> are failing</p>" + new string('x', 400) + "</body></html>";
+
+        var result = await new SmtpNotificationSender(Options.Create(options)).SendAsync(new Notification("me@homelab.example", "Portarr: backups failing", "Caf\u00e9 \u2713 the backups are failing", html), Token);
+
+        result.Should().Be(NotificationResult.Done);
+        await server.Task.WaitAsync(TimeSpan.FromSeconds(10), Token);
+        var received = server.Received.ToString();
+        received.Should().Contain("Content-Type: multipart/alternative").And.Contain("Subject: Portarr: backups failing");
+        var parts = Parts(received);
+        parts.Should().HaveCount(2);
+        parts[0].ContentType.Should().Be("text/plain");
+        parts[0].Text.Should().Be("Caf\u00e9 \u2713 the backups are failing");
+        parts[1].ContentType.Should().Be("text/html");
+        parts[1].Text.Should().Be(html, "the HTML is the last alternative, the one a client shows first when it can");
+        received.Should().Contain("charset=utf-8");
+    }
+
+    [Fact]
+    public async Task should_send_a_plain_text_mail_when_there_is_no_html()
+    {
+        using var server = new MailServer();
+        var options = Settings(server.Port, "127.0.0.1");
+        options.Smtp.StartTls = false;
+
+        var result = await new SmtpNotificationSender(Options.Create(options)).SendAsync(new Notification("me@homelab.example", "s", "just text", "  "), Token);
+
+        result.Should().Be(NotificationResult.Done);
+        await server.Task.WaitAsync(TimeSpan.FromSeconds(10), Token);
+        server.Received.ToString().Should().NotContain("multipart").And.NotContain("text/html").And.Contain("Content-Type: text/plain");
+    }
+
+    [Fact]
+    public async Task should_send_a_rendered_mail_with_its_level_in_the_html_and_its_text_alternative()
+    {
+        using var server = new MailServer();
+        var options = Settings(server.Port, "127.0.0.1");
+        options.Smtp.StartTls = false;
+        var template = new MailTemplate("Portarr: backups {{state}}", "Backups are {{state}}:\n\n{{@subjects}}", "Backups are {{state}}");
+        var mail = template.RenderMail(new MailContext("Portarr", "Data", MailLevel.Danger), new Dictionary<string, string> { ["state"] = "failing" }, new Dictionary<string, IReadOnlyList<string>> { ["subjects"] = ["alpha", "<b>beta</b>"] });
+
+        var result = await new SmtpNotificationSender(Options.Create(options)).SendAsync(mail.ToNotification("me@homelab.example"), Token);
+
+        result.Should().Be(NotificationResult.Done);
+        await server.Task.WaitAsync(TimeSpan.FromSeconds(10), Token);
+        var parts = Parts(server.Received.ToString());
+        parts[0].Text.Should().Contain("[Critical] Portarr - Data").And.Contain("- alpha");
+        parts[1].Text.Should().Contain("#b91c1c").And.Contain("&lt;b&gt;beta&lt;/b&gt;").And.NotContain("<b>beta");
+    }
+
     [Fact]
     public async Task should_say_that_the_server_cannot_be_reached_in_a_sentence_without_the_exception()
     {

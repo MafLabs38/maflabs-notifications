@@ -1,0 +1,290 @@
+namespace MafLabs.Notifications.Test;
+
+/// <summary>When to write: a table of decisions, as pure functions of the clock and of plain values.</summary>
+public sealed class NotificationDeciderFixture
+{
+    private static readonly DateTimeOffset Start = new(2026, 11, 20, 8, 0, 0, TimeSpan.Zero);
+
+    private static readonly CategoryPolicy Policy = new() { ReminderHours = 24, MaxReminders = 3, MaxPerDay = 3, MinimumLevel = MailLevel.Warning };
+
+    private static readonly MailsToday Quiet = new(0, 0);
+
+    private static EpisodeState Fresh() => new(Start, Start, 0, null, null);
+
+    private static EpisodeState Mailed(int mails, DateTimeOffset lastMailedAt, DateTimeOffset? lastAttemptAt = null) =>
+        new(Start, lastMailedAt, mails, lastMailedAt, lastAttemptAt ?? lastMailedAt);
+
+    private static NotificationDecision Decide(DateTimeOffset now, EpisodeState episode, CategoryPolicy? policy = null, MailsToday? today = null, MailLevel level = MailLevel.Danger, NotificationPolicyOptions? options = null) =>
+        NotificationDecider.Decide(now, level, policy ?? Policy, episode, today ?? Quiet, options);
+
+    [Fact]
+    public void should_send_the_first_mail_once_the_problem_has_lasted_long_enough()
+    {
+        var decision = Decide(Start.AddMinutes(5), Fresh());
+
+        decision.Should().Be(new NotificationDecision(NotificationAction.SendFirst, DecisionReason.FirstMail));
+        decision.Send.Should().BeTrue();
+    }
+
+    [Fact]
+    public void should_wait_for_the_confirmation_delay_so_that_a_blip_is_not_a_mail()
+    {
+        Decide(Start.AddMinutes(4), Fresh()).Should().Be(new NotificationDecision(NotificationAction.None, DecisionReason.NotConfirmedYet));
+    }
+
+    [Fact]
+    public void should_use_the_confirmation_delay_of_the_options()
+    {
+        var options = new NotificationPolicyOptions { ConfirmMinutes = 30 };
+
+        Decide(Start.AddMinutes(29), Fresh(), options: options).Reason.Should().Be(DecisionReason.NotConfirmedYet);
+        Decide(Start.AddMinutes(30), Fresh(), options: options).Action.Should().Be(NotificationAction.SendFirst);
+    }
+
+    [Fact]
+    public void should_stay_silent_when_the_category_is_disabled()
+    {
+        var policy = Policy with { Enabled = false };
+
+        Decide(Start.AddHours(1), Fresh(), policy).Should().Be(new NotificationDecision(NotificationAction.None, DecisionReason.CategoryDisabled));
+    }
+
+    [Theory]
+    [InlineData(MailLevel.Ok, MailLevel.Warning, false)]
+    [InlineData(MailLevel.Info, MailLevel.Warning, false)]
+    [InlineData(MailLevel.Warning, MailLevel.Warning, true)]
+    [InlineData(MailLevel.Danger, MailLevel.Warning, true)]
+    [InlineData(MailLevel.Warning, MailLevel.Danger, false)]
+    [InlineData(MailLevel.Danger, MailLevel.Danger, true)]
+    [InlineData(MailLevel.Ok, MailLevel.Ok, true)]
+    public void should_write_only_from_the_minimum_level_up(MailLevel level, MailLevel minimum, bool sends)
+    {
+        var decision = Decide(Start.AddHours(1), Fresh(), Policy with { MinimumLevel = minimum }, level: level);
+
+        decision.Send.Should().Be(sends);
+        if (!sends)
+        {
+            decision.Reason.Should().Be(DecisionReason.BelowMinimumLevel);
+        }
+    }
+
+    [Theory]
+    [InlineData(23, DecisionReason.ReminderNotDue)]
+    [InlineData(24, DecisionReason.ReminderDue)]
+    [InlineData(30, DecisionReason.ReminderDue)]
+    public void should_space_the_reminders_by_the_hours_of_the_category(int hoursAfterTheMail, DecisionReason reason)
+    {
+        var mailedAt = Start.AddMinutes(5);
+
+        var decision = Decide(mailedAt.AddHours(hoursAfterTheMail), Mailed(1, mailedAt));
+
+        decision.Reason.Should().Be(reason);
+        decision.Action.Should().Be(reason == DecisionReason.ReminderDue ? NotificationAction.SendReminder : NotificationAction.None);
+    }
+
+    [Fact]
+    public void should_follow_the_hours_of_each_category_apart()
+    {
+        var mailedAt = Start.AddMinutes(5);
+        var hourly = Policy with { ReminderHours = 1 };
+
+        Decide(mailedAt.AddHours(1), Mailed(1, mailedAt), hourly).Action.Should().Be(NotificationAction.SendReminder);
+        Decide(mailedAt.AddHours(1), Mailed(1, mailedAt)).Action.Should().Be(NotificationAction.None);
+    }
+
+    [Theory]
+    [InlineData(1, true)]
+    [InlineData(2, true)]
+    [InlineData(3, true)]
+    [InlineData(4, false)]
+    [InlineData(5, false)]
+    public void should_stop_after_the_most_reminders_the_category_allows(int mailsSent, bool reminds)
+    {
+        var mailedAt = Start.AddMinutes(5);
+
+        var decision = Decide(mailedAt.AddDays(2), Mailed(mailsSent, mailedAt));
+
+        decision.Send.Should().Be(reminds);
+        if (!reminds)
+        {
+            decision.Reason.Should().Be(DecisionReason.RemindersExhausted);
+        }
+    }
+
+    [Fact]
+    public void should_send_a_single_mail_when_no_reminder_is_allowed()
+    {
+        var once = Policy with { MaxReminders = 0 };
+        var mailedAt = Start.AddMinutes(5);
+
+        Decide(Start.AddMinutes(5), Fresh(), once).Action.Should().Be(NotificationAction.SendFirst);
+        Decide(mailedAt.AddDays(2), Mailed(1, mailedAt), once).Reason.Should().Be(DecisionReason.RemindersExhausted);
+    }
+
+    [Fact]
+    public void should_pause_after_a_mail_that_could_not_leave_then_try_again()
+    {
+        var failed = new EpisodeState(Start, Start.AddMinutes(20), 0, null, Start.AddMinutes(10));
+
+        Decide(Start.AddMinutes(24), failed).Should().Be(new NotificationDecision(NotificationAction.None, DecisionReason.WaitingAfterFailure));
+        Decide(Start.AddMinutes(25), failed).Should().Be(new NotificationDecision(NotificationAction.SendFirst, DecisionReason.FirstMail));
+    }
+
+    [Fact]
+    public void should_pause_after_a_reminder_that_could_not_leave()
+    {
+        var mailedAt = Start.AddMinutes(5);
+        var failedAt = mailedAt.AddHours(24);
+        var episode = Mailed(1, mailedAt, failedAt);
+
+        episode.LastAttemptFailed.Should().BeTrue();
+        Decide(failedAt.AddMinutes(14), episode).Reason.Should().Be(DecisionReason.WaitingAfterFailure);
+        Decide(failedAt.AddMinutes(15), episode).Action.Should().Be(NotificationAction.SendReminder);
+    }
+
+    [Fact]
+    public void should_not_see_a_failure_in_an_attempt_that_went_through()
+    {
+        Mailed(1, Start.AddMinutes(5)).LastAttemptFailed.Should().BeFalse();
+        Fresh().LastAttemptFailed.Should().BeFalse();
+    }
+
+    [Fact]
+    public void should_use_the_retry_delay_of_the_options()
+    {
+        var failed = new EpisodeState(Start, Start.AddMinutes(20), 0, null, Start.AddMinutes(10));
+
+        Decide(Start.AddMinutes(11), failed, options: new NotificationPolicyOptions { RetryMinutes = 1 }).Action.Should().Be(NotificationAction.SendFirst);
+    }
+
+    [Theory]
+    [InlineData(2, 0, false)]
+    [InlineData(3, 0, true)]
+    [InlineData(0, 9, false)]
+    [InlineData(0, 10, true)]
+    public void should_hold_the_daily_caps(int inCategory, int overall, bool capped)
+    {
+        var decision = Decide(Start.AddHours(1), Fresh(), today: new MailsToday(inCategory, overall));
+
+        decision.Send.Should().Be(!capped);
+        if (capped)
+        {
+            decision.Reason.Should().Be(inCategory >= 3 ? DecisionReason.CategoryDayCapReached : DecisionReason.DayCapReached);
+        }
+    }
+
+    [Fact]
+    public void should_cap_a_reminder_too()
+    {
+        var mailedAt = Start.AddMinutes(5);
+
+        Decide(mailedAt.AddHours(24), Mailed(1, mailedAt), today: new MailsToday(3, 3)).Reason.Should().Be(DecisionReason.CategoryDayCapReached);
+    }
+
+    [Fact]
+    public void should_cap_a_category_by_its_own_number_and_all_by_the_options()
+    {
+        var one = Policy with { MaxPerDay = 1 };
+
+        Decide(Start.AddHours(1), Fresh(), one, new MailsToday(1, 1)).Reason.Should().Be(DecisionReason.CategoryDayCapReached);
+        Decide(Start.AddHours(1), Fresh(), Policy, new MailsToday(0, 2), options: new NotificationPolicyOptions { MaxPerDay = 2 }).Reason.Should().Be(DecisionReason.DayCapReached);
+    }
+
+    [Fact]
+    public void should_treat_a_mail_without_a_date_as_the_first_one()
+    {
+        var odd = new EpisodeState(Start, Start, 2, null, null);
+
+        Decide(Start.AddHours(1), odd).Reason.Should().Be(DecisionReason.FirstMail);
+    }
+
+    [Fact]
+    public void should_drop_at_once_an_episode_that_was_never_mailed()
+    {
+        NotificationDecider.HasEnded(Fresh(), new NotificationPolicyOptions(), Start.AddMinutes(1), Start).Should().BeTrue();
+    }
+
+    [Fact]
+    public void should_keep_a_mailed_episode_until_the_clear_delay_has_passed()
+    {
+        var episode = Mailed(1, Start.AddMinutes(5));
+        var options = new NotificationPolicyOptions { ClearMinutes = 15 };
+        var seenAt = episode.LastSeenAt;
+
+        NotificationDecider.HasEnded(episode, options, seenAt.AddMinutes(14), Start).Should().BeFalse();
+        NotificationDecider.HasEnded(episode, options, seenAt.AddMinutes(15), Start).Should().BeTrue();
+    }
+
+    [Fact]
+    public void should_count_the_clear_delay_from_the_start_of_the_run_after_a_restart()
+    {
+        var episode = Mailed(1, Start.AddMinutes(5));
+        var restart = episode.LastSeenAt.AddHours(3);
+        var options = new NotificationPolicyOptions { ClearMinutes = 15 };
+
+        NotificationDecider.HasEnded(episode, options, restart.AddMinutes(1), restart).Should().BeFalse();
+        NotificationDecider.HasEnded(episode, options, restart.AddMinutes(15), restart).Should().BeTrue();
+    }
+
+    [Fact]
+    public void should_number_the_reminders_and_say_whether_another_one_follows()
+    {
+        var mailedAt = Start.AddMinutes(5);
+
+        NotificationDecider.ReminderOf(Fresh()).Should().Be(0);
+        NotificationDecider.ReminderOf(Mailed(2, mailedAt)).Should().Be(2);
+        NotificationDecider.WillRemind(Fresh(), Policy).Should().BeTrue();
+        NotificationDecider.WillRemind(Mailed(2, mailedAt), Policy).Should().BeTrue();
+        NotificationDecider.WillRemind(Mailed(3, mailedAt), Policy).Should().BeFalse();
+        NotificationDecider.WillRemind(Fresh(), Policy with { MaxReminders = 0 }).Should().BeFalse();
+    }
+
+    [Fact]
+    public void should_have_defaults_that_pass_the_validators()
+    {
+        new NotificationPolicyOptions().Check().Should().BeNull();
+        CategoryPolicyValidator.Validate("data", new CategoryPolicy()).Should().BeEmpty();
+        new NotificationPolicyOptionsValidator().Validate(null, new NotificationPolicyOptions()).Succeeded.Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData(-1, 15, 15, 10)]
+    [InlineData(5, 0, 15, 10)]
+    [InlineData(5, 15, 0, 10)]
+    [InlineData(5, 15, 15, 0)]
+    [InlineData(5, 15, 15, 1001)]
+    public void should_refuse_options_out_of_range(int confirm, int clear, int retry, int perDay)
+    {
+        var options = new NotificationPolicyOptions { ConfirmMinutes = confirm, ClearMinutes = clear, RetryMinutes = retry, MaxPerDay = perDay };
+
+        options.Check().Should().Contain("MaxPerDay");
+        var result = new NotificationPolicyOptionsValidator().Validate(null, options);
+        result.Failed.Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData(0, 3, 3, "ReminderHours")]
+    [InlineData(721, 3, 3, "ReminderHours")]
+    [InlineData(24, -1, 3, "MaxReminders")]
+    [InlineData(24, 31, 3, "MaxReminders")]
+    [InlineData(24, 3, 0, "MaxPerDay")]
+    [InlineData(24, 3, 1001, "MaxPerDay")]
+    public void should_say_in_a_sentence_what_is_wrong_with_a_category_policy(int hours, int reminders, int perDay, string setting)
+    {
+        var problems = CategoryPolicyValidator.Validate("data", new CategoryPolicy { ReminderHours = hours, MaxReminders = reminders, MaxPerDay = perDay });
+
+        problems.Should().ContainSingle().Which.Should().StartWith("Category 'data':").And.Contain(setting);
+    }
+
+    [Fact]
+    public void should_refuse_a_level_that_does_not_exist()
+    {
+        CategoryPolicyValidator.Validate("data", new CategoryPolicy { MinimumLevel = (MailLevel)42 }).Should().ContainSingle().Which.Should().Contain("MinimumLevel").And.Contain("Danger");
+    }
+
+    [Fact]
+    public void should_list_every_problem_not_only_the_first()
+    {
+        CategoryPolicyValidator.Validate("data", new CategoryPolicy { ReminderHours = 0, MaxReminders = 99, MaxPerDay = 0 }).Should().HaveCount(3);
+    }
+}

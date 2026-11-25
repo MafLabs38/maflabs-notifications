@@ -2,8 +2,11 @@ using Microsoft.Extensions.Options;
 
 namespace MafLabs.Notifications;
 
-/// <summary>A message for a person: where it goes, a short subject and a plain text.</summary>
-public sealed record Notification(string Recipient, string Subject, string Body);
+/// <summary>
+/// A message for a person: where it goes, a short subject and a plain text. <paramref name="HtmlBody"/> is the same message as HTML, when there is
+/// one: the mail then carries both (text and HTML alternatives), and the client shows the one it prefers.
+/// </summary>
+public sealed record Notification(string Recipient, string Subject, string Body, string? HtmlBody = null);
 
 /// <summary>Whether a notification was handed over, and when it was not, why in a short sentence (never a secret).</summary>
 public sealed record NotificationResult(bool Delivered, string? Reason = null)

@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <PackageId>MafLabs.Notifications</PackageId>
-    <Description>Send a notification to a person by mail (SMTP with STARTTLS, password read from a file), with plain-text templates. Swappable channel, never throws on a failed delivery.</Description>
+    <Description>Send a notification to a person by mail (SMTP with STARTTLS, password read from a file): text and HTML mails from one template, a shared layout, notification categories with a sending policy, and the pure rule that decides when to write. Swappable channel, never throws on a failed delivery.</Description>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <RepositoryUrl>https://github.com/MafLabs38/maflabs-notifications</RepositoryUrl>
   </PropertyGroup>

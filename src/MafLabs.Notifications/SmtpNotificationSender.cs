@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Mail;
+using System.Net.Mime;
 using System.Net.Sockets;
 using System.Text;
 using Microsoft.Extensions.Options;
@@ -84,6 +85,14 @@ public sealed class SmtpNotificationSender : INotificationSender
                 SubjectEncoding = Encoding.UTF8,
                 BodyEncoding = Encoding.UTF8,
             };
+            if (!string.IsNullOrWhiteSpace(notification.HtmlBody))
+            {
+                // The text stays the body (text/plain) and the HTML is its alternative: multipart/alternative, the client shows the last one it understands.
+                var html = AlternateView.CreateAlternateViewFromString(notification.HtmlBody, Encoding.UTF8, MediaTypeNames.Text.Html);
+                html.TransferEncoding = TransferEncoding.Base64;
+                message.AlternateViews.Add(html);
+            }
+
             // S5332 (a clear connection): STARTTLS is on unless the operator turns it off, and the validation refuses that with a password. It is only for a catcher on a test machine.
 #pragma warning disable S5332
             using var client = new SmtpClient(smtp.Host, smtp.Port)
