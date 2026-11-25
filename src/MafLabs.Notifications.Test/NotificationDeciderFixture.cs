@@ -302,4 +302,13 @@ public sealed class NotificationDeciderFixture
     {
         CategoryPolicyValidator.Validate("data", new CategoryPolicy { ReminderHours = 0, MaxReminders = 99, MaxPerDay = 0 }).Should().HaveCount(3);
     }
+
+    [Fact]
+    public void should_refuse_a_negative_count()
+    {
+        var now = DateTimeOffset.UnixEpoch;
+        ((Action)(() => _ = new EpisodeState(now, now, -1, null, null))).Should().Throw<ArgumentOutOfRangeException>();
+        ((Action)(() => _ = new SentToday(-1, 0))).Should().Throw<ArgumentOutOfRangeException>();
+        ((Action)(() => _ = new SentToday(0, -1))).Should().Throw<ArgumentOutOfRangeException>();
+    }
 }

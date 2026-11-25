@@ -72,18 +72,37 @@ public sealed record EpisodeState(DateTimeOffset StartedAt, DateTimeOffset LastS
     /// How many notifications about it were delivered. Notifications delivered with no date for the last one cannot be: <see cref="ArgumentException"/> when the state
     /// is built, so that the application's store is told it is inconsistent.
     /// </summary>
-    public int NotificationsSent { get; init; } = NotificationsSent > 0 && LastSentAt is null
-        ? throw new ArgumentException("An episode with delivered notifications (NotificationsSent > 0) needs the date of the last one (LastSentAt).", nameof(LastSentAt))
-        : NotificationsSent;
+    public int NotificationsSent { get; init; } = CheckSent(NotificationsSent, LastSentAt);
+
+    private static int CheckSent(int sent, DateTimeOffset? lastSentAt)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(sent);
+        return sent > 0 && lastSentAt is null
+            ? throw new ArgumentException("An episode with delivered notifications (NotificationsSent > 0) needs the date of the last one (LastSentAt).", nameof(lastSentAt))
+            : sent;
+    }
 
     /// <summary>The last try did not leave: it is later than the last notification that did.</summary>
     public bool LastAttemptFailed => LastAttemptAt is { } attempt && (LastSentAt is null || attempt > LastSentAt);
 }
 
 /// <summary>How many notifications were tried in the last 24 hours, delivered or not (a failing server must not become a cannon either).</summary>
-/// <param name="InCategory">In the category the decision is about.</param>
-/// <param name="Overall">In all categories.</param>
-public sealed record SentToday(int InCategory, int Overall);
+public sealed record SentToday
+{
+    public SentToday(int inCategory, int overall)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(inCategory);
+        ArgumentOutOfRangeException.ThrowIfNegative(overall);
+        InCategory = inCategory;
+        Overall = overall;
+    }
+
+    /// <summary>In the category the decision is about.</summary>
+    public int InCategory { get; init; }
+
+    /// <summary>In all categories.</summary>
+    public int Overall { get; init; }
+}
 
 /// <summary>What to do about a problem now.</summary>
 public enum NotificationAction
@@ -155,7 +174,7 @@ public static class NotificationDecider
     /// and last the daily caps. When <paramref name="options"/> is null the defaults of <see cref="NotificationPolicyOptions"/> apply, not what the operator
     /// configured: an application passes <c>IOptions&lt;NotificationPolicyOptions&gt;.Value</c>. <c>Decide</c> knows only the category switch
     /// (<see cref="CategoryPolicy.Enabled"/>), not the global <see cref="NotificationOptions.Enabled"/>: the application must not call it, or must not send,
-    /// when that one is false (the sender refuses to send then).
+    /// when that one is false (the sender made by <see cref="NotificationProviders.Select"/>, the one <c>AddNotifications</c> registers, refuses to send then, whatever the provider).
     /// </summary>
     public static NotificationDecision Decide(DateTimeOffset now, NotificationLevel level, CategoryPolicy policy, EpisodeState episode, SentToday today, NotificationPolicyOptions? options = null)
     {

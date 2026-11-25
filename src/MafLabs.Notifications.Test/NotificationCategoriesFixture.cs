@@ -232,13 +232,20 @@ public sealed class NotificationCategoriesFixture
     }
 
     [Fact]
-    public void should_still_build_the_sender_from_the_provider_named_in_the_options()
+    public async Task should_build_the_sender_behind_the_global_switch_from_the_provider_named_in_the_options()
     {
         var services = new ServiceCollection();
-        services.Configure<NotificationOptions>(options => options.Provider = "Smtp");
+        services.Configure<NotificationOptions>(options =>
+        {
+            options.Provider = "Smtp";
+            options.Enabled = false;
+        });
         services.AddNotifications(categories => categories.Add("data", "Data", "Backups"));
         using var provider = services.BuildServiceProvider();
 
-        provider.GetRequiredService<INotificationSender>().Should().BeOfType<SmtpNotificationSender>();
+        var off = await provider.GetRequiredService<INotificationSender>().SendAsync(new Notification("me@homelab.example", "s", "b"), TestContext.Current.CancellationToken);
+
+        off.Should().Be(NotificationResult.Failed("Notifications are turned off."));
+        NotificationProviders.Find(provider.GetServices<INotificationProvider>().Concat(NotificationProviders.BuiltIn), "smtp").Should().NotBeNull();
     }
 }

@@ -59,12 +59,6 @@ public sealed class SmtpNotificationSender : INotificationSender
     public async Task<NotificationResult> SendAsync(Notification notification, CancellationToken cancellationToken)
     {
         var settings = _options.Value;
-        if (!settings.Enabled)
-        {
-            // The global off switch holds here, in one place, before any file is read or any connection made.
-            return NotificationResult.Failed("Notifications are turned off.");
-        }
-
         var smtp = settings.Smtp;
         string? password = null;
         if (!string.IsNullOrWhiteSpace(smtp.UserName))

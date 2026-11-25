@@ -60,13 +60,24 @@ public static class NotificationProviders
     public static INotificationProvider? Find(IEnumerable<INotificationProvider> providers, string? name) =>
         providers.FirstOrDefault(provider => string.Equals(provider.Name, name?.Trim(), StringComparison.OrdinalIgnoreCase));
 
-    /// <summary>The sender of the provider named in the options; a sender that always fails, in words, when there is none.</summary>
+    /// <summary>
+    /// The sender of the provider named in the options, behind the global off switch (<see cref="NotificationOptions.Enabled"/>): whatever the provider, nothing is
+    /// sent, and nothing is read or connected to, while it is off. A sender that always fails, in words, when there is no such provider.
+    /// </summary>
     public static INotificationSender Select(IEnumerable<INotificationProvider> providers, IOptions<NotificationOptions> options) =>
-        Find(providers, options.Value.Provider)?.Create(options) ?? new UnavailableNotificationSender(options.Value.Provider);
+        new EnabledNotificationSender(Find(providers, options.Value.Provider)?.Create(options) ?? new UnavailableNotificationSender(options.Value.Provider), options);
 }
 
 internal sealed class UnavailableNotificationSender(string provider) : INotificationSender
 {
     public Task<NotificationResult> SendAsync(Notification notification, CancellationToken cancellationToken) =>
         Task.FromResult(NotificationResult.Failed($"There is no notification provider called '{provider}'."));
+}
+
+internal sealed class EnabledNotificationSender(INotificationSender inner, IOptions<NotificationOptions> options) : INotificationSender
+{
+    public Task<NotificationResult> SendAsync(Notification notification, CancellationToken cancellationToken) =>
+        options.Value.Enabled
+            ? inner.SendAsync(notification, cancellationToken)
+            : Task.FromResult(NotificationResult.Failed("Notifications are turned off."));
 }

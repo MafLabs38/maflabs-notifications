@@ -187,4 +187,12 @@ public sealed class MailLayoutFixture
         MailLayout.RenderText(new MailContext("P", "C", NotificationLevel.Info), "t", [new MessageParagraph(Tricky)]).Should().Contain("paidxy").And.NotContain("\u202E");
         MailLayout.RenderHtml(new MailContext("P", "C", NotificationLevel.Info), "t", [new MessageParagraph(Tricky)]).Should().Contain("paidxy").And.NotContain("\u202E");
     }
+
+    [Fact]
+    public void should_turn_a_line_or_paragraph_separator_into_a_space()
+    {
+        var text = MailLayout.RenderText(new MailContext("P", "C", NotificationLevel.Info), "one\u2028two\u2029three", [new MessageParagraph("a\u2028b")]);
+
+        text.Should().Contain("one two three").And.Contain("a b").And.NotContain("\u2028").And.NotContain("\u2029");
+    }
 }

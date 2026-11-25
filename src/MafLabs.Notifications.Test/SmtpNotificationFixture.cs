@@ -185,7 +185,11 @@ public sealed class SmtpNotificationFixture : IDisposable
         options.Smtp.StartTls = false;
         options.Enabled = false;
 
-        var result = await new SmtpNotificationSender(Options.Create(options)).SendAsync(new Notification("me@homelab.example", "s", "b"), Token);
+        options.Smtp.UserName = "me";
+        options.Smtp.PasswordFile = "/does/not/exist";
+        var sender = NotificationProviders.Select(NotificationProviders.BuiltIn, Options.Create(options));
+
+        var result = await sender.SendAsync(new Notification("me@homelab.example", "s", "b"), Token);
 
         result.Should().Be(NotificationResult.Failed("Notifications are turned off."));
         server.Received.ToString().Should().BeEmpty();

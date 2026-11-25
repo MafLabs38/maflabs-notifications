@@ -7,7 +7,7 @@ namespace MafLabs.Notifications;
 internal static class MailText
 {
     /// <summary>
-    /// Replaces every control character by a space (a line break is kept when <paramref name="singleLine"/> is false, a carriage return never),
+    /// Replaces every control character and every Unicode line or paragraph separator (U+2028, U+2029) by a space (a line break is kept when <paramref name="singleLine"/> is false, a carriage return never),
     /// removes the Unicode format characters (category Cf: the bidirectional overrides that can make a text read differently from what it is, the
     /// zero-width characters, the byte order mark), trims, and cuts to <paramref name="maxLength"/> characters with an ellipsis when it is given.
     /// </summary>
@@ -21,7 +21,8 @@ internal static class MailText
                 continue;
             }
 
-            builder.Append(Rune.IsControl(rune) && !(rune.Value == '\n' && !singleLine) ? ' ' : rune.ToString());
+            var separator = Rune.GetUnicodeCategory(rune) is UnicodeCategory.LineSeparator or UnicodeCategory.ParagraphSeparator;
+            builder.Append((Rune.IsControl(rune) && !(rune.Value == '\n' && !singleLine)) || separator ? ' ' : rune.ToString());
         }
 
         var cleaned = builder.ToString().Trim();
