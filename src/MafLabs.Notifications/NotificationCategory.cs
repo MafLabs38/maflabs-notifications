@@ -3,9 +3,9 @@ using System.Text.RegularExpressions;
 namespace MafLabs.Notifications;
 
 /// <summary>
-/// How one category of notifications behaves, so that the operator can tune each one apart: the <c>data</c> mails can be daily while the
-/// <c>maintenance</c> mails are off. A plain settings class (bind it from configuration or from what the operator edits); <see cref="CategoryPolicyValidator"/>
-/// says what is wrong with one. The defaults suit a small installation: one mail per problem, at most daily reminders, a few per day.
+/// How one category of notifications behaves, so that the operator can tune each one apart: the <c>data</c> notifications can be daily while the
+/// <c>maintenance</c> notifications are off. A plain settings class (bind it from configuration or from what the operator edits); <see cref="CategoryPolicyValidator"/>
+/// says what is wrong with one. The defaults suit a small installation: one notification per problem, at most daily reminders, a few per day.
 /// </summary>
 public sealed record CategoryPolicy
 {
@@ -15,7 +15,7 @@ public sealed record CategoryPolicy
     /// <summary>The most reminders one problem can get.</summary>
     public const int MaxRemindersLimit = 30;
 
-    /// <summary>The most mails a category can be allowed in 24 hours.</summary>
+    /// <summary>The most notifications a category can be allowed in 24 hours.</summary>
     public const int MaxPerDayLimit = 1000;
 
     /// <summary>Whether the category writes at all. On by default.</summary>
@@ -27,10 +27,10 @@ public sealed record CategoryPolicy
     /// <summary>Hours between two reminders while a problem lasts (1 to 720). 24 by default: at most daily.</summary>
     public int ReminderHours { get; set; } = 24;
 
-    /// <summary>How many reminders follow the first mail of a problem, at most (0 to 30; 0 = one mail only). 3 by default.</summary>
+    /// <summary>How many reminders follow the first notification of a problem, at most (0 to 30; 0 = one notification only). 3 by default.</summary>
     public int MaxReminders { get; set; } = 3;
 
-    /// <summary>The most mails tried in 24 hours for this category, whether they went through or not (1 to 1000). 3 by default: a flapping tool is not a mail cannon.</summary>
+    /// <summary>The most notifications tried in 24 hours for this category, whether they went through or not (1 to 1000). 3 by default: a flapping tool is not a notification cannon.</summary>
     public int MaxPerDay { get; set; } = 3;
 }
 
@@ -54,12 +54,12 @@ public static class CategoryPolicyValidator
 
         if (policy.MaxReminders is < 0 or > CategoryPolicy.MaxRemindersLimit)
         {
-            problems.Add($"Category '{categoryId}': MaxReminders is how many reminders follow the first mail, from 0 (a single mail) to {CategoryPolicy.MaxRemindersLimit}.");
+            problems.Add($"Category '{categoryId}': MaxReminders is how many reminders follow the first notification, from 0 (a single notification) to {CategoryPolicy.MaxRemindersLimit}.");
         }
 
         if (policy.MaxPerDay is < 1 or > CategoryPolicy.MaxPerDayLimit)
         {
-            problems.Add($"Category '{categoryId}': MaxPerDay is the most mails in 24 hours, from 1 to {CategoryPolicy.MaxPerDayLimit}. To stop a category, turn Enabled off.");
+            problems.Add($"Category '{categoryId}': MaxPerDay is the most notifications in 24 hours, from 1 to {CategoryPolicy.MaxPerDayLimit}. To stop a category, turn Enabled off.");
         }
 
         return problems;
@@ -68,7 +68,7 @@ public static class CategoryPolicyValidator
 
 /// <summary>A kind of notification a program declares: <c>data</c>, <c>apps</c>... with the name the operator sees and the policy it starts with.</summary>
 /// <param name="Id">The stable name, lower case: letters, digits and hyphens, starting with a letter (<c>data</c>, <c>infrastructure</c>). It keys the operator's settings and the log.</param>
-/// <param name="Title">The display name (<c>Data</c>), shown in the mail footer and in the settings.</param>
+/// <param name="Title">The display name (<c>Data</c>), shown in the footer of a mail and in the settings.</param>
 /// <param name="Description">One sentence that says what the category writes about, for the settings page.</param>
 /// <param name="DefaultPolicy">The policy that applies until the operator changes it.</param>
 public sealed record NotificationCategory(string Id, string Title, string Description, CategoryPolicy DefaultPolicy)
@@ -79,7 +79,7 @@ public sealed record NotificationCategory(string Id, string Title, string Descri
 
 /// <summary>
 /// The categories a program declares at startup (see <c>AddNotifications</c>). A duplicate id, an id that is not well formed or a default policy that
-/// is out of range is refused when it is added, not later when a mail is due. Fill it during startup, then only read it. It keeps its own copy of
+/// is out of range is refused when it is added, not later when a notification is due. Fill it during startup, then only read it. It keeps its own copy of
 /// every category it is given and hands out copies, so that nobody can change a validated default afterwards.
 /// </summary>
 public sealed partial class NotificationCategories

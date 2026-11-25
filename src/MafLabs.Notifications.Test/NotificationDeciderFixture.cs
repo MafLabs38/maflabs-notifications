@@ -7,14 +7,14 @@ public sealed class NotificationDeciderFixture
 
     private static readonly CategoryPolicy Policy = new() { ReminderHours = 24, MaxReminders = 3, MaxPerDay = 3, MinimumLevel = NotificationLevel.Warning };
 
-    private static readonly MailsToday Quiet = new(0, 0);
+    private static readonly SentToday Quiet = new(0, 0);
 
     private static EpisodeState Fresh() => new(Start, Start, 0, null, null);
 
     private static EpisodeState Mailed(int mails, DateTimeOffset lastMailedAt, DateTimeOffset? lastAttemptAt = null) =>
         new(Start, lastMailedAt, mails, lastMailedAt, lastAttemptAt ?? lastMailedAt);
 
-    private static NotificationDecision Decide(DateTimeOffset now, EpisodeState episode, CategoryPolicy? policy = null, MailsToday? today = null, NotificationLevel level = NotificationLevel.Danger, NotificationPolicyOptions? options = null) =>
+    private static NotificationDecision Decide(DateTimeOffset now, EpisodeState episode, CategoryPolicy? policy = null, SentToday? today = null, NotificationLevel level = NotificationLevel.Danger, NotificationPolicyOptions? options = null) =>
         NotificationDecider.Decide(now, level, policy ?? Policy, episode, today ?? Quiet, options);
 
     [Fact]
@@ -22,7 +22,7 @@ public sealed class NotificationDeciderFixture
     {
         var decision = Decide(Start.AddMinutes(5), Fresh());
 
-        decision.Should().Be(new NotificationDecision(NotificationAction.SendFirst, DecisionReason.FirstMail));
+        decision.Should().Be(new NotificationDecision(NotificationAction.SendFirst, DecisionReason.FirstNotification));
         decision.Send.Should().BeTrue();
     }
 
@@ -127,7 +127,7 @@ public sealed class NotificationDeciderFixture
         var failed = new EpisodeState(Start, Start.AddMinutes(20), 0, null, Start.AddMinutes(10));
 
         Decide(Start.AddMinutes(24), failed).Should().Be(new NotificationDecision(NotificationAction.None, DecisionReason.WaitingAfterFailure));
-        Decide(Start.AddMinutes(25), failed).Should().Be(new NotificationDecision(NotificationAction.SendFirst, DecisionReason.FirstMail));
+        Decide(Start.AddMinutes(25), failed).Should().Be(new NotificationDecision(NotificationAction.SendFirst, DecisionReason.FirstNotification));
     }
 
     [Fact]
@@ -164,7 +164,7 @@ public sealed class NotificationDeciderFixture
     [InlineData(0, 10, true)]
     public void should_hold_the_daily_caps(int inCategory, int overall, bool capped)
     {
-        var decision = Decide(Start.AddHours(1), Fresh(), today: new MailsToday(inCategory, overall));
+        var decision = Decide(Start.AddHours(1), Fresh(), today: new SentToday(inCategory, overall));
 
         decision.Send.Should().Be(!capped);
         if (capped)
@@ -178,7 +178,7 @@ public sealed class NotificationDeciderFixture
     {
         var mailedAt = Start.AddMinutes(5);
 
-        Decide(mailedAt.AddHours(24), Mailed(1, mailedAt), today: new MailsToday(3, 3)).Reason.Should().Be(DecisionReason.CategoryDayCapReached);
+        Decide(mailedAt.AddHours(24), Mailed(1, mailedAt), today: new SentToday(3, 3)).Reason.Should().Be(DecisionReason.CategoryDayCapReached);
     }
 
     [Fact]
@@ -186,8 +186,8 @@ public sealed class NotificationDeciderFixture
     {
         var one = Policy with { MaxPerDay = 1 };
 
-        Decide(Start.AddHours(1), Fresh(), one, new MailsToday(1, 1)).Reason.Should().Be(DecisionReason.CategoryDayCapReached);
-        Decide(Start.AddHours(1), Fresh(), Policy, new MailsToday(0, 2), options: new NotificationPolicyOptions { MaxPerDay = 2 }).Reason.Should().Be(DecisionReason.DayCapReached);
+        Decide(Start.AddHours(1), Fresh(), one, new SentToday(1, 1)).Reason.Should().Be(DecisionReason.CategoryDayCapReached);
+        Decide(Start.AddHours(1), Fresh(), Policy, new SentToday(0, 2), options: new NotificationPolicyOptions { MaxPerDay = 2 }).Reason.Should().Be(DecisionReason.DayCapReached);
     }
 
     [Fact]
@@ -195,12 +195,12 @@ public sealed class NotificationDeciderFixture
     {
         var odd = () => new EpisodeState(Start, Start, 2, null, null);
 
-        odd.Should().Throw<ArgumentException>().WithMessage("*LastMailedAt*");
-        var fresh = Fresh() with { MailsSent = 0 };
-        Decide(Start.AddHours(1), fresh).Reason.Should().Be(DecisionReason.FirstMail);
-        var bypassed = Fresh() with { MailsSent = 2 };
+        odd.Should().Throw<ArgumentException>().WithMessage("*LastSentAt*");
+        var fresh = Fresh() with { NotificationsSent = 0 };
+        Decide(Start.AddHours(1), fresh).Reason.Should().Be(DecisionReason.FirstNotification);
+        var bypassed = Fresh() with { NotificationsSent = 2 };
         var decide = () => Decide(Start.AddHours(1), bypassed);
-        decide.Should().Throw<ArgumentException>().WithMessage("*LastMailedAt*");
+        decide.Should().Throw<ArgumentException>().WithMessage("*LastSentAt*");
     }
 
     [Fact]
@@ -251,14 +251,14 @@ public sealed class NotificationDeciderFixture
     }
 
     [Theory]
-    [InlineData(-1, 15, 15, 10, "ConfirmMinutes is the minutes a problem must last before it is mailed, from 0 to 1440.")]
-    [InlineData(1441, 15, 15, 10, "ConfirmMinutes is the minutes a problem must last before it is mailed, from 0 to 1440.")]
-    [InlineData(5, 0, 15, 10, "ClearMinutes is the minutes a mailed problem must be gone before its episode ends, from 1 to 1440.")]
-    [InlineData(5, 1441, 15, 10, "ClearMinutes is the minutes a mailed problem must be gone before its episode ends, from 1 to 1440.")]
-    [InlineData(5, 15, 0, 10, "RetryMinutes is the minutes to wait after a mail that could not be sent, from 1 to 1440.")]
-    [InlineData(5, 15, 1441, 10, "RetryMinutes is the minutes to wait after a mail that could not be sent, from 1 to 1440.")]
-    [InlineData(5, 15, 15, 0, "MaxPerDay is the most mails in 24 hours, all categories together, from 1 to 1000.")]
-    [InlineData(5, 15, 15, 1001, "MaxPerDay is the most mails in 24 hours, all categories together, from 1 to 1000.")]
+    [InlineData(-1, 15, 15, 10, "ConfirmMinutes is the minutes a problem must last before it is notified, from 0 to 1440.")]
+    [InlineData(1441, 15, 15, 10, "ConfirmMinutes is the minutes a problem must last before it is notified, from 0 to 1440.")]
+    [InlineData(5, 0, 15, 10, "ClearMinutes is the minutes a notified problem must be gone before its episode ends, from 1 to 1440.")]
+    [InlineData(5, 1441, 15, 10, "ClearMinutes is the minutes a notified problem must be gone before its episode ends, from 1 to 1440.")]
+    [InlineData(5, 15, 0, 10, "RetryMinutes is the minutes to wait after a notification that could not be sent, from 1 to 1440.")]
+    [InlineData(5, 15, 1441, 10, "RetryMinutes is the minutes to wait after a notification that could not be sent, from 1 to 1440.")]
+    [InlineData(5, 15, 15, 0, "MaxPerDay is the most notifications in 24 hours, all categories together, from 1 to 1000.")]
+    [InlineData(5, 15, 15, 1001, "MaxPerDay is the most notifications in 24 hours, all categories together, from 1 to 1000.")]
     public void should_refuse_options_out_of_range_with_the_sentence_of_the_wrong_setting(int confirm, int clear, int retry, int perDay, string sentence)
     {
         var options = new NotificationPolicyOptions { ConfirmMinutes = confirm, ClearMinutes = clear, RetryMinutes = retry, MaxPerDay = perDay };

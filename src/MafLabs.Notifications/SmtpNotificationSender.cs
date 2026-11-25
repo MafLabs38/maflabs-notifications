@@ -85,10 +85,13 @@ public sealed class SmtpNotificationSender : INotificationSender
                 SubjectEncoding = Encoding.UTF8,
                 BodyEncoding = Encoding.UTF8,
             };
-            if (!string.IsNullOrWhiteSpace(notification.HtmlBody))
+            if (notification.Content is { } content)
             {
-                // The text stays the body (text/plain) and the HTML is its alternative: multipart/alternative, the client shows the last one it understands.
-                var html = AlternateView.CreateAlternateViewFromString(notification.HtmlBody, Encoding.UTF8, MediaTypeNames.Text.Html);
+                // The mail dresses the content itself: the text stays the body (text/plain) and the HTML is its alternative (multipart/alternative, the client shows the last one it understands).
+                // Every value is encoded by the layout; no HTML ever comes from the caller.
+                var context = new MailContext(content.Product, notification.Category ?? "General", notification.Level ?? NotificationLevel.Info);
+                message.Body = MailLayout.RenderText(context, content.Title, content.Blocks);
+                var html = AlternateView.CreateAlternateViewFromString(MailLayout.RenderHtml(context, content.Title, content.Blocks), Encoding.UTF8, MediaTypeNames.Text.Html);
                 html.TransferEncoding = TransferEncoding.Base64;
                 message.AlternateViews.Add(html);
             }

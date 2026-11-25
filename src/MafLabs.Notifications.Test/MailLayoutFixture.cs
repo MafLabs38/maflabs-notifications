@@ -5,11 +5,11 @@ namespace MafLabs.Notifications.Test;
 /// <summary>The shared layout: the accent of each level, what a mail client can render, the escaping, and the text alternative.</summary>
 public sealed class MailLayoutFixture
 {
-    private static readonly IReadOnlyList<MailBlock> Blocks =
+    private static readonly IReadOnlyList<MessageBlock> Blocks =
     [
-        new MailParagraph("Portarr sees 4 data assets whose backups are failing."),
-        new MailItems(["alpha", "beta", "gamma", "delta"]),
-        new MailCallToAction("Open the Data page to see the last backup of each."),
+        new MessageParagraph("Portarr sees 4 data assets whose backups are failing."),
+        new MessageItems(["alpha", "beta", "gamma", "delta"]),
+        new MessageCallToAction("Open the Data page to see the last backup of each."),
     ];
 
     private static string Html(NotificationLevel level = NotificationLevel.Danger) => MailLayout.RenderHtml(new MailContext("Portarr", "Data", level), "Backups are failing", Blocks);
@@ -83,7 +83,7 @@ public sealed class MailLayoutFixture
     public void should_encode_everything_that_comes_from_the_caller()
     {
         const string Hostile = "<script>alert(1)</script>\"quoted\" & 'single'";
-        var blocks = new MailBlock[] { new MailParagraph(Hostile), new MailItems([Hostile, "<b>bold</b>"]), new MailCallToAction(Hostile) };
+        var blocks = new MessageBlock[] { new MessageParagraph(Hostile), new MessageItems([Hostile, "<b>bold</b>"]), new MessageCallToAction(Hostile) };
 
         var html = MailLayout.RenderHtml(new MailContext(Hostile, Hostile, NotificationLevel.Warning), Hostile, blocks);
 
@@ -95,7 +95,7 @@ public sealed class MailLayoutFixture
     [Fact]
     public void should_make_line_breaks_inside_a_paragraph_into_br_and_drop_control_characters()
     {
-        var html = MailLayout.RenderHtml(new MailContext("P", "C", NotificationLevel.Info), "t", [new MailParagraph("one\ntwo\r\u0007three")]);
+        var html = MailLayout.RenderHtml(new MailContext("P", "C", NotificationLevel.Info), "t", [new MessageParagraph("one\ntwo\r\u0007three")]);
 
         html.Should().Contain("one<br>two  three");
     }
@@ -103,7 +103,7 @@ public sealed class MailLayoutFixture
     [Fact]
     public void should_leave_out_a_block_that_has_nothing_to_show()
     {
-        var html = MailLayout.RenderHtml(new MailContext("P", "C", NotificationLevel.Info), "t", [new MailParagraph("  "), new MailItems([]), new MailCallToAction("")]);
+        var html = MailLayout.RenderHtml(new MailContext("P", "C", NotificationLevel.Info), "t", [new MessageParagraph("  "), new MessageItems([]), new MessageCallToAction("")]);
 
         html.Should().NotContain("<p ").And.NotContain("<ul").And.NotContain("font-weight:600");
     }
@@ -122,7 +122,7 @@ public sealed class MailLayoutFixture
     [Fact]
     public void should_keep_the_text_free_of_html_and_of_header_injection()
     {
-        var text = MailLayout.RenderText(new MailContext("P\nBcc: x", "<C>", NotificationLevel.Info), "T\r\nBcc: y", [new MailParagraph("a & b <c>")]);
+        var text = MailLayout.RenderText(new MailContext("P\nBcc: x", "<C>", NotificationLevel.Info), "T\r\nBcc: y", [new MessageParagraph("a & b <c>")]);
 
         text.Should().Contain("a & b <c>").And.NotContain("&amp;").And.StartWith("[Information] P Bcc: x - <C>\n\nT  Bcc: y\n");
     }
@@ -155,13 +155,13 @@ public sealed class MailLayoutFixture
         var items = Enumerable.Range(1, MailLayout.MaxItems + 3).Select(number => $"item-{number}").ToList();
         var context = new MailContext("P", "C", NotificationLevel.Info);
 
-        var text = MailLayout.RenderText(context, "t", [new MailItems(items)]);
-        var html = MailLayout.RenderHtml(context, "t", [new MailItems(items)]);
+        var text = MailLayout.RenderText(context, "t", [new MessageItems(items)]);
+        var html = MailLayout.RenderHtml(context, "t", [new MessageItems(items)]);
 
         text.Should().Contain("- item-50\n- and 3 more\n").And.NotContain("item-51");
         html.Should().Contain("item-50</li>").And.Contain(">and 3 more</li>").And.NotContain("item-51");
         Regex.Matches(html, "<li ").Should().HaveCount(MailLayout.MaxItems + 1);
-        MailLayout.RenderText(context, "t", [new MailItems(items.Take(MailLayout.MaxItems).ToList())]).Should().NotContain("more");
+        MailLayout.RenderText(context, "t", [new MessageItems(items.Take(MailLayout.MaxItems).ToList())]).Should().NotContain("more");
     }
 
     [Fact]
@@ -169,9 +169,9 @@ public sealed class MailLayoutFixture
     {
         var context = new MailContext("P", "C", NotificationLevel.Info);
 
-        MailLayout.RenderText(context, "t", [new MailItems(["a", " ", "", null!, "b"])]).Should().Contain("- a\n- b\n");
-        ((Action)(() => MailLayout.RenderText(context, "t", [new MailItems(null!)]))).Should().Throw<ArgumentNullException>();
-        ((Action)(() => MailLayout.RenderHtml(context, "t", [new MailItems(null!)]))).Should().Throw<ArgumentNullException>();
+        MailLayout.RenderText(context, "t", [new MessageItems(["a", " ", "", null!, "b"])]).Should().Contain("- a\n- b\n");
+        ((Action)(() => MailLayout.RenderText(context, "t", [new MessageItems(null!)]))).Should().Throw<ArgumentNullException>();
+        ((Action)(() => MailLayout.RenderHtml(context, "t", [new MessageItems(null!)]))).Should().Throw<ArgumentNullException>();
         ((Action)(() => MailLayout.RenderHtml(new MailContext(null!, "C", NotificationLevel.Info), "t", []))).Should().Throw<ArgumentNullException>();
         ((Action)(() => MailLayout.RenderText(new MailContext("P", null!, NotificationLevel.Info), "t", []))).Should().Throw<ArgumentNullException>();
         ((Action)(() => MailLayout.RenderText(context, null!, []))).Should().Throw<ArgumentNullException>();
@@ -184,7 +184,7 @@ public sealed class MailLayoutFixture
         const string Tricky = "pa\u202Eid\u2066x\u2069\u200B\u200C\u200D\uFEFFy";
 
         MailText.Clean(Tricky, singleLine: true).Should().Be("paidxy");
-        MailLayout.RenderText(new MailContext("P", "C", NotificationLevel.Info), "t", [new MailParagraph(Tricky)]).Should().Contain("paidxy").And.NotContain("\u202E");
-        MailLayout.RenderHtml(new MailContext("P", "C", NotificationLevel.Info), "t", [new MailParagraph(Tricky)]).Should().Contain("paidxy").And.NotContain("\u202E");
+        MailLayout.RenderText(new MailContext("P", "C", NotificationLevel.Info), "t", [new MessageParagraph(Tricky)]).Should().Contain("paidxy").And.NotContain("\u202E");
+        MailLayout.RenderHtml(new MailContext("P", "C", NotificationLevel.Info), "t", [new MessageParagraph(Tricky)]).Should().Contain("paidxy").And.NotContain("\u202E");
     }
 }

@@ -3,20 +3,18 @@ using Microsoft.Extensions.Options;
 namespace MafLabs.Notifications;
 
 /// <summary>
-/// A message for a person: where it goes, a short subject and a plain text. <paramref name="HtmlBody"/> is the same message as HTML, when there is
-/// one: the mail then carries both (text and HTML alternatives), and the client shows the one it prefers. A provider that is not mail (a chat, a push)
-/// uses <paramref name="Level"/>, <paramref name="Category"/>, <paramref name="Subject"/> and <paramref name="Body"/>, and ignores <paramref name="HtmlBody"/>.
+/// A message for a person: where it goes, a short subject and a plain text, which is all a channel needs. <paramref name="Level"/> and
+/// <paramref name="Category"/> say how much it matters and what it is about; <paramref name="Content"/> is the same message as structured blocks, when there
+/// is one. Nothing here is framed for a channel: a mail provider dresses <paramref name="Content"/> (text and HTML) itself, and a chat or a push provider
+/// uses <paramref name="Subject"/> and <paramref name="Body"/> as they are, or lays the blocks out its own way.
 /// </summary>
 /// <param name="Recipient">Where it goes.</param>
 /// <param name="Subject">A short subject.</param>
-/// <param name="Body">The plain text.</param>
-/// <param name="HtmlBody">
-/// The same message as HTML. It is sent as it is, never encoded or cleaned by the sender: build it with <see cref="MailTemplate"/> or <see cref="MailLayout"/>,
-/// which encode every value, and never concatenate a value that is not yours into it.
-/// </param>
-/// <param name="Level">How much it matters, for a channel that has no HTML to show it with, or null when not known.</param>
+/// <param name="Body">The plain text of the message, with no header, signature or footer.</param>
+/// <param name="Level">How much it matters, or null when not known.</param>
 /// <param name="Category">The display name of the category it belongs to, or null when not known.</param>
-public sealed record Notification(string Recipient, string Subject, string Body, string? HtmlBody = null, NotificationLevel? Level = null, string? Category = null);
+/// <param name="Content">The message as blocks, or null for a message that is only a subject and a text. Build it with <see cref="MailTemplate"/>.</param>
+public sealed record Notification(string Recipient, string Subject, string Body, NotificationLevel? Level = null, string? Category = null, NotificationContent? Content = null);
 
 /// <summary>Whether a notification was handed over, and when it was not, why in a short sentence (never a secret).</summary>
 public sealed record NotificationResult(bool Delivered, string? Reason = null)

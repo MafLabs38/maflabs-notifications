@@ -210,13 +210,16 @@ public sealed class MailTemplateFixture
     }
 
     [Fact]
-    public void should_hand_the_mail_to_a_notification_with_both_bodies()
+    public void should_hand_the_message_to_a_notification_without_any_mail_framing()
     {
         var notification = Backups.RenderMail(Context, BackupValues(), Subjects).ToNotification("operator@homelab.example");
 
         notification.Recipient.Should().Be("operator@homelab.example");
         notification.Body.Should().Contain("- alpha: failing");
-        notification.HtmlBody.Should().StartWith("<!DOCTYPE html>");
+        notification.Body.Should().NotContain("[Critical]").And.NotContain("-- ").And.NotContain("you receive this");
+        notification.Content.Should().NotBeNull();
+        notification.Content!.Product.Should().Be(Context.Product);
+        notification.Content.Blocks.Should().NotBeEmpty();
         notification.Level.Should().Be(Context.Level);
         notification.Category.Should().Be(Context.CategoryTitle);
     }

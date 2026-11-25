@@ -214,7 +214,7 @@ public sealed class NotificationCategoriesFixture
 
         var read = () => provider.GetRequiredService<IOptions<NotificationPolicyOptions>>().Value;
 
-        read.Should().Throw<OptionsValidationException>().WithMessage("*MaxPerDay is the most mails in 24 hours, all categories together, from 1 to 1000*");
+        read.Should().Throw<OptionsValidationException>().WithMessage("*MaxPerDay is the most notifications in 24 hours, all categories together, from 1 to 1000*");
     }
 
     [Fact]

@@ -9,23 +9,6 @@ namespace MafLabs.Notifications;
 /// <param name="Level">The accent of the mail.</param>
 public sealed record MailContext(string Product, string CategoryTitle, NotificationLevel Level);
 
-/// <summary>A part of the body of a mail, in the order it is written. Plain text in, the layout does the encoding for each format.</summary>
-public abstract record MailBlock
-{
-    private protected MailBlock()
-    {
-    }
-}
-
-/// <summary>A paragraph. A line break inside the text is kept.</summary>
-public sealed record MailParagraph(string Text) : MailBlock;
-
-/// <summary>A list of short lines (names of what is concerned): <c>- item</c> lines in the text, a bulleted list in the HTML.</summary>
-public sealed record MailItems(IReadOnlyList<string> Lines) : MailBlock;
-
-/// <summary>The one thing to do, set apart. Text only: no link is needed.</summary>
-public sealed record MailCallToAction(string Text) : MailBlock;
-
 /// <summary>
 /// The look of every mail: one HTML document and its text alternative, from the same content. The HTML is made to survive the mail clients:
 /// tables for the layout (no flex, no grid), inline styles, nothing loaded from outside (no image, font or script), at most 600 pixels wide,
@@ -67,7 +50,7 @@ public static class MailLayout
     }
 
     /// <summary>The text alternative: the level, the title, the blocks and the footer, readable as it is.</summary>
-    public static string RenderText(MailContext context, string title, IReadOnlyList<MailBlock> blocks)
+    public static string RenderText(MailContext context, string title, IReadOnlyList<MessageBlock> blocks)
     {
         Check(context);
         ArgumentNullException.ThrowIfNull(title);
@@ -86,19 +69,19 @@ public static class MailLayout
     }
 
     /// <summary>The blocks as text, separated by a blank line, with no header and no footer.</summary>
-    internal static string BodyText(IReadOnlyList<MailBlock> blocks) =>
+    internal static string BodyText(IReadOnlyList<MessageBlock> blocks) =>
         string.Join("\n\n", blocks.Select(BlockText).Where(text => text.Length > 0));
 
-    private static string BlockText(MailBlock block) => block switch
+    private static string BlockText(MessageBlock block) => block switch
     {
-        MailParagraph paragraph => Text(paragraph.Text),
-        MailCallToAction action => Text(action.Text),
-        MailItems items => string.Join('\n', Visible(items).Select(line => $"- {line}")),
+        MessageParagraph paragraph => Text(paragraph.Text),
+        MessageCallToAction action => Text(action.Text),
+        MessageItems items => string.Join('\n', Visible(items).Select(line => $"- {line}")),
         _ => throw new ArgumentException("Unknown kind of mail block.", nameof(block)),
     };
 
     /// <summary>The HTML document. Every value is encoded; nothing the caller gives is ever written raw.</summary>
-    public static string RenderHtml(MailContext context, string title, IReadOnlyList<MailBlock> blocks)
+    public static string RenderHtml(MailContext context, string title, IReadOnlyList<MessageBlock> blocks)
     {
         Check(context);
         ArgumentNullException.ThrowIfNull(title);
@@ -140,12 +123,12 @@ public static class MailLayout
         return builder.ToString();
     }
 
-    private static void AppendBlock(StringBuilder builder, MailBlock block, string accent)
+    private static void AppendBlock(StringBuilder builder, MessageBlock block, string accent)
     {
         string content;
         switch (block)
         {
-            case MailParagraph paragraph:
+            case MessageParagraph paragraph:
                 if (Text(paragraph.Text).Length == 0)
                 {
                     return;
@@ -153,7 +136,7 @@ public static class MailLayout
 
                 content = $"<p class=\"mt\" style=\"margin:0;color:#1f2937;\">{Html(paragraph.Text)}</p>";
                 break;
-            case MailCallToAction action:
+            case MessageCallToAction action:
                 if (Text(action.Text).Length == 0)
                 {
                     return;
@@ -161,7 +144,7 @@ public static class MailLayout
 
                 content = $"<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\"><tr><td class=\"mb mt\" bgcolor=\"#f3f4f6\" style=\"background-color:#f3f4f6;color:#111827;border-left:4px solid {accent};padding:12px 16px;font-weight:600;font-family:{Font};font-size:15px;line-height:1.5;\">{Html(action.Text)}</td></tr></table>";
                 break;
-            case MailItems items:
+            case MessageItems items:
                 var visible = Visible(items);
                 if (visible.Count == 0)
                 {
@@ -188,7 +171,7 @@ public static class MailLayout
     }
 
     /// <summary>The lines of a list as they are written: cleaned, the empty ones dropped, at most <see cref="MaxItems"/> and then one line that counts the rest.</summary>
-    private static List<string> Visible(MailItems items)
+    private static List<string> Visible(MessageItems items)
     {
         ArgumentNullException.ThrowIfNull(items.Lines);
         var lines = items.Lines.Where(line => line is not null).Select(Line).Where(line => line.Length > 0).ToList();

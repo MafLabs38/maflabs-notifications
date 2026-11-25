@@ -2,18 +2,25 @@ using System.Text.RegularExpressions;
 
 namespace MafLabs.Notifications;
 
-/// <summary>A mail ready to send: the subject, the text and the HTML made from the same content.</summary>
+/// <summary>A message ready to send: the subject, the title and the blocks, with the context that frames it.</summary>
 /// <param name="Subject">The subject.</param>
-/// <param name="Text">The plain text alternative.</param>
-/// <param name="Html">The HTML mail.</param>
-/// <param name="Context">What the mail is about, when it was rendered with one (<see cref="MailTemplate.RenderMail"/> always gives it): the level and the category carried to the notification.</param>
-public sealed record RenderedMail(string Subject, string Text, string Html, MailContext? Context = null)
+/// <param name="Title">The heading.</param>
+/// <param name="Blocks">The body, in order.</param>
+/// <param name="Context">What the message is about: the product, the category and the level.</param>
+public sealed record RenderedMail(string Subject, string Title, IReadOnlyList<MessageBlock> Blocks, MailContext Context)
 {
+    /// <summary>The text alternative of the mail, framed by its context (header line, signature, footer). For a preview or a test: a provider makes its own.</summary>
+    public string Text => MailLayout.RenderText(Context, Title, Blocks);
+
+    /// <summary>The HTML mail. For a preview or a test: the mail provider makes its own from the same content.</summary>
+    public string Html => MailLayout.RenderHtml(Context, Title, Blocks);
+
     /// <summary>
-    /// The notification that carries this mail to one recipient: the text for the clients that show no HTML, the HTML for the others, and the level and
-    /// the category title of the context for a provider that is not mail.
+    /// The notification that carries this message to one recipient: the bare text as <see cref="Notification.Body"/> (no mail framing), the level and the
+    /// category title, and the blocks as <see cref="Notification.Content"/> for a provider that dresses them.
     /// </summary>
-    public Notification ToNotification(string recipient) => new(recipient, Subject, Text, Html, Context?.Level, Context?.CategoryTitle);
+    public Notification ToNotification(string recipient) =>
+        new(recipient, Subject, MailLayout.BodyText(Blocks), Context.Level, Context.CategoryTitle, new NotificationContent(Context.Product, Title, Blocks));
 }
 
 /// <summary>
@@ -79,10 +86,10 @@ public sealed partial class MailTemplate
     {
         ArgumentNullException.ThrowIfNull(context);
         var (subject, title, blocks) = Build(values, lists);
-        return new RenderedMail(subject, MailLayout.RenderText(context, title, blocks), MailLayout.RenderHtml(context, title, blocks), context);
+        return new RenderedMail(subject, title, blocks, context);
     }
 
-    private (string Subject, string Title, List<MailBlock> Blocks) Build(IReadOnlyDictionary<string, string> values, IReadOnlyDictionary<string, IReadOnlyList<string>>? lists)
+    private (string Subject, string Title, List<MessageBlock> Blocks) Build(IReadOnlyDictionary<string, string> values, IReadOnlyDictionary<string, IReadOnlyList<string>>? lists)
     {
         ArgumentNullException.ThrowIfNull(values);
         var missing = Variables.Where(name => !values.ContainsKey(name)).Concat(ListVariables.Where(name => lists is null || !lists.ContainsKey(name))).ToList();
@@ -91,7 +98,7 @@ public sealed partial class MailTemplate
             throw new InvalidOperationException($"The mail template needs: {string.Join(", ", missing)}.");
         }
 
-        var blocks = new List<MailBlock>();
+        var blocks = new List<MessageBlock>();
         foreach (var part in _parts)
         {
             switch (part)
@@ -100,15 +107,15 @@ public sealed partial class MailTemplate
                     var lines = lists![list.Name].Select(item => MailText.Clean(item, singleLine: true, MaxValueLength)).Where(item => item.Length > 0).ToList();
                     if (lines.Count > 0)
                     {
-                        blocks.Add(new MailItems(lines));
+                        blocks.Add(new MessageItems(lines));
                     }
 
                     break;
                 case TextPart { CallToAction: true } text:
-                    blocks.Add(new MailCallToAction(Fill(text.Text, values, singleLine: false)));
+                    blocks.Add(new MessageCallToAction(Fill(text.Text, values, singleLine: false)));
                     break;
                 case TextPart text:
-                    blocks.Add(new MailParagraph(Fill(text.Text, values, singleLine: false)));
+                    blocks.Add(new MessageParagraph(Fill(text.Text, values, singleLine: false)));
                     break;
             }
         }
