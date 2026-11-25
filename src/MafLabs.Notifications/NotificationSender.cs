@@ -14,7 +14,7 @@ namespace MafLabs.Notifications;
 /// <param name="Level">How much it matters, or null when not known.</param>
 /// <param name="Category">The display name of the category it belongs to, or null when not known.</param>
 /// <param name="CategoryId">The stable key of the category (<c>data</c>, the key of the settings and of the log), for a channel that routes by category; null when not known.</param>
-/// <param name="Content">The message as blocks, or null for a message that is only a subject and a text. Build it with <see cref="MailTemplate"/>.</param>
+/// <param name="Content">The message as blocks, or null for a message that is only a subject and a text. Build it with <see cref="MailTemplate"/>, which also fills <paramref name="Category"/> and <paramref name="CategoryId"/>. A provider that dresses it (mail) needs <paramref name="Category"/> with it, and refuses a content without one; a missing <paramref name="Level"/> is read as <see cref="NotificationLevel.Info"/>.</param>
 public sealed record Notification(string Recipient, string Subject, string Body, NotificationLevel? Level = null, string? Category = null, NotificationContent? Content = null, string? CategoryId = null);
 
 /// <summary>Whether a notification was handed over, and when it was not, why in a short sentence (never a secret).</summary>

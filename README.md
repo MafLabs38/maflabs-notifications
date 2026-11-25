@@ -38,7 +38,7 @@ if (decision.Send)
         """,
         "Backups are {{state}}");
     var mail = template.RenderMail(
-        new MailContext("Orders", categories.Get("data").Title, NotificationLevel.Danger),
+        new MailContext("Orders", categories.Get("data").Title, NotificationLevel.Danger, "data"),
         new Dictionary<string, string> { ["state"] = "failing", ["count"] = "2" },
         new Dictionary<string, IReadOnlyList<string>> { ["subjects"] = ["media-library", "photos"] });
     var result = await sender.SendAsync(mail.ToNotification(recipient), cancellationToken);
