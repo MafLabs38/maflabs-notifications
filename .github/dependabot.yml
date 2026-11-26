@@ -1,10 +1,21 @@
 version: 2
 updates:
+  # The commit-message prefix gives every Dependabot pull request a Conventional Commit title,
+  # which the required conventional-title check asks for.
   - package-ecosystem: nuget
     directory: /
     schedule:
       interval: weekly
+    commit-message:
+      prefix: "chore(deps)"
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      # init and analyze must move together: one without the other fails the CodeQL job.
+      codeql-action:
+        patterns:
+          - "github/codeql-action*"
