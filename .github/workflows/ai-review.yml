@@ -23,9 +23,11 @@ jobs:
     name: ai-review (${{ matrix.agent }})
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    # No secrets for pull requests from forks; drafts are reviewed once ready.
+    # No secrets for pull requests from forks, nor for Dependabot's (GitHub gives its runs only Dependabot secrets): they are
+    # checked by the build, the tests and CodeQL. Drafts are reviewed once ready.
     if: >-
       github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.user.login != 'dependabot[bot]' &&
       !github.event.pull_request.draft &&
       !contains(github.event.pull_request.labels.*.name, 'skip-quality') &&
       (github.event.action != 'labeled' || github.event.label.name == 'ai-review')
